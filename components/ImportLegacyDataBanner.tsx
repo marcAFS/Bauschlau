@@ -7,16 +7,22 @@ import { useBauSchlauStore } from "@/lib/store";
 const FLAG_KEY = "bau-schlau-legacy-import-handled";
 
 interface Props {
-  onDone: () => void;
+  // Nur beim Überspringen aufgerufen: Banner ausblenden, lokalen Stand NICHT
+  // anfassen (kein Server-Hydrate!) – sonst würde noch nicht synchronisierte
+  // lokale Daten durch den (leeren) Server-Stand überschrieben werden.
+  onSkip: () => void;
+  // Nur nach erfolgreichem Import aufgerufen: jetzt ist der Server-Stand die
+  // importierten Daten, ein Hydrate danach ist sicher.
+  onImported: () => void;
 }
 
-export default function ImportLegacyDataBanner({ onDone }: Props) {
+export default function ImportLegacyDataBanner({ onSkip, onImported }: Props) {
   const importLegacyLocalStorageData = useBauSchlauStore((s) => s.importLegacyLocalStorageData);
   const [status, setStatus] = useState<"idle" | "importing" | "done">("idle");
 
   const skip = () => {
     localStorage.setItem(FLAG_KEY, "true");
-    onDone();
+    onSkip();
   };
 
   const importNow = async () => {
@@ -25,7 +31,7 @@ export default function ImportLegacyDataBanner({ onDone }: Props) {
       await importLegacyLocalStorageData();
       localStorage.setItem(FLAG_KEY, "true");
       setStatus("done");
-      setTimeout(onDone, 1200);
+      setTimeout(onImported, 1200);
     } catch (err) {
       console.error(err);
       setStatus("idle");
