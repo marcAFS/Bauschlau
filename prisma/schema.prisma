@@ -20,7 +20,7 @@ model Task {
   kontakt           Json?
   flaeche           Float?
   prioritaet        String
-  zielKW            String?
+  deadline          DateTime?
   materialStatus    String?
   lieferzeitTage    Int?
   sperrfristBisTag  Int?

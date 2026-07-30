@@ -15,33 +15,20 @@ import { useBauSchlauStore } from "@/lib/store";
 import { api } from "@/lib/api-client";
 import { BEREICH_LABEL } from "@/lib/types";
 import type { Protokoll, ProtokollExtraktion } from "@/lib/types";
+import TaskModal from "@/components/TaskModal";
 
 const QUELLEN: Protokoll["quelle"][] = ["Schornsteinfeger", "Energieberater", "Handwerker", "Sonstiges"];
 
 function ProtokollCard({ protokoll }: { protokoll: Protokoll }) {
-  const addTask = useBauSchlauStore((s) => s.addTask);
   const deleteProtokoll = useBauSchlauStore((s) => s.deleteProtokoll);
   const [uebernommenIdx, setUebernommenIdx] = useState<Set<number>>(new Set());
   const [open, setOpen] = useState(false);
+  const [modalIdx, setModalIdx] = useState<number | null>(null);
 
   const extraktion = protokoll.extraktion;
   const aufgaben = extraktion?.aufgaben ?? [];
   const auflagen = extraktion?.auflagen ?? [];
   const termine = extraktion?.termine ?? [];
-
-  const uebernehmen = (idx: number) => {
-    const a = aufgaben[idx];
-    addTask({
-      title: a.titel,
-      description: a.beschreibung,
-      bereich: a.bereich,
-      gewerk: protokoll.quelle,
-      status: "offen",
-      ausfuehrung: "handwerker",
-      prioritaet: "mittel",
-    });
-    setUebernommenIdx((prev) => new Set(prev).add(idx));
-  };
 
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900/40">
@@ -85,7 +72,7 @@ function ProtokollCard({ protokoll }: { protokoll: Protokoll }) {
                       {uebernommenIdx.has(i) ? (
                         <span className="flex shrink-0 items-center gap-1 text-xs text-emerald-400"><CheckCircle2 className="h-3.5 w-3.5" /> Übernommen</span>
                       ) : (
-                        <button onClick={() => uebernehmen(i)} className="shrink-0 rounded-lg bg-orange-500/15 px-2 py-1 text-xs font-medium text-orange-400 hover:bg-orange-500/25">
+                        <button onClick={() => setModalIdx(i)} className="shrink-0 rounded-lg bg-orange-500/15 px-2 py-1 text-xs font-medium text-orange-400 hover:bg-orange-500/25">
                           Übernehmen
                         </button>
                       )}
@@ -124,6 +111,27 @@ function ProtokollCard({ protokoll }: { protokoll: Protokoll }) {
           </div>
         </div>
       )}
+
+      <TaskModal
+        open={modalIdx !== null}
+        onClose={() => setModalIdx(null)}
+        prefill={
+          modalIdx !== null
+            ? {
+                title: aufgaben[modalIdx].titel,
+                description: aufgaben[modalIdx].beschreibung,
+                bereich: aufgaben[modalIdx].bereich,
+                gewerk: protokoll.quelle,
+                status: "offen",
+                ausfuehrung: "handwerker",
+                prioritaet: "mittel",
+              }
+            : null
+        }
+        onSaved={() => {
+          if (modalIdx !== null) setUebernommenIdx((prev) => new Set(prev).add(modalIdx));
+        }}
+      />
     </div>
   );
 }

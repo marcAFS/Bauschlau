@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyDelegate = any;
 
-const DATE_KEYS = ["createdAt", "updatedAt", "erledigtAm", "datum", "erstelltAm"];
+const DATE_KEYS = ["createdAt", "updatedAt", "erledigtAm", "datum", "erstelltAm", "deadline"];
 
 export function coerceDates(data: Record<string, unknown>): Record<string, unknown> {
   const copy: Record<string, unknown> = { ...data };

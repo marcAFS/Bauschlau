@@ -173,7 +173,7 @@ function ErinnerungsGenerator() {
 
   const task = handwerkerTasks.find((t) => t.id === taskId);
   const text = task
-    ? `Guten Tag${task.kontakt?.name ? " " + task.kontakt.name : ""}, kurze Erinnerung zu "${task.title}"${task.zielKW ? ` (Ziel: ${task.zielKW})` : ""}. Können wir den Stand kurz abstimmen? Danke und viele Grüße.`
+    ? `Guten Tag${task.kontakt?.name ? " " + task.kontakt.name : ""}, kurze Erinnerung zu "${task.title}"${task.deadline ? ` (Deadline: ${formatDate(task.deadline)})` : ""}. Können wir den Stand kurz abstimmen? Danke und viele Grüße.`
     : "";
 
   return (

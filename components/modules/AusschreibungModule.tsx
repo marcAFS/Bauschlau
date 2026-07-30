@@ -5,7 +5,7 @@ import { FileText, Printer, Upload, Trash2, AlertTriangle, ListChecks } from "lu
 import { useBauSchlauStore } from "@/lib/store";
 import { api } from "@/lib/api-client";
 import { BEREICH_LABEL } from "@/lib/types";
-import { formatCurrency } from "@/lib/ui-helpers";
+import { formatCurrency, formatDate } from "@/lib/ui-helpers";
 
 const inputClass =
   "w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500";
@@ -27,7 +27,7 @@ function AngebotAnfrageGenerator() {
       `Aufgabe: ${task.title}\n` +
       (task.description ? `Beschreibung: ${task.description}\n` : "") +
       (task.flaeche ? `Fläche: ${task.flaeche} m²\n` : "") +
-      (task.zielKW ? `Gewünschter Ausführungszeitraum: ${task.zielKW}\n` : "") +
+      (task.deadline ? `Gewünschter Fertigstellungstermin: ${formatDate(task.deadline)}\n` : "") +
       `\nBitte geben Sie in Ihrem Angebot an:\n` +
       `- Festpreis oder Abrechnung nach Aufwand\n` +
       `- Enthaltene Nebenkosten (Anfahrt, Entsorgung, Gerüst, Baustrom)\n` +

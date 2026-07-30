@@ -11,6 +11,9 @@ interface Props {
   onClose: () => void;
   task?: Task | null;
   prefill?: Partial<Task> | null;
+  // Wird nur nach erfolgreichem Speichern aufgerufen (nicht bei Abbrechen/X) –
+  // z.B. damit der Protokoll-Analysator einen Vorschlag als "übernommen" markieren kann.
+  onSaved?: (task: Task) => void;
 }
 
 const emptyForm = (prefill?: Partial<Task> | null) => ({
@@ -26,7 +29,7 @@ const emptyForm = (prefill?: Partial<Task> | null) => ({
   kontaktEmail: prefill?.kontakt?.email ?? "",
   flaeche: prefill?.flaeche?.toString() ?? "",
   prioritaet: (prefill?.prioritaet ?? "mittel") as Prioritaet,
-  zielKW: prefill?.zielKW ?? "",
+  deadline: prefill?.deadline ? prefill.deadline.slice(0, 10) : "",
   materialStatus: prefill?.materialStatus ?? ("" as MaterialStatus | ""),
   lieferzeitTage: prefill?.lieferzeitTage?.toString() ?? "",
   sperrfristBisTag: prefill?.sperrfristBisTag?.toString() ?? "",
@@ -35,7 +38,7 @@ const emptyForm = (prefill?: Partial<Task> | null) => ({
   budgetIst: prefill?.budgetIst?.toString() ?? "",
 });
 
-export default function TaskModal({ open, onClose, task, prefill }: Props) {
+export default function TaskModal({ open, onClose, task, prefill, onSaved }: Props) {
   const addTask = useBauSchlauStore((s) => s.addTask);
   const updateTask = useBauSchlauStore((s) => s.updateTask);
   const deleteTask = useBauSchlauStore((s) => s.deleteTask);
@@ -73,7 +76,7 @@ export default function TaskModal({ open, onClose, task, prefill }: Props) {
           : undefined,
       flaeche: form.flaeche ? Number(form.flaeche) : undefined,
       prioritaet: form.prioritaet,
-      zielKW: form.zielKW || undefined,
+      deadline: form.deadline || undefined,
       materialStatus: form.materialStatus || undefined,
       lieferzeitTage: form.lieferzeitTage ? Number(form.lieferzeitTage) : undefined,
       sperrfristBisTag: form.sperrfristBisTag ? Number(form.sperrfristBisTag) : undefined,
@@ -86,7 +89,8 @@ export default function TaskModal({ open, onClose, task, prefill }: Props) {
     if (task) {
       updateTask(task.id, payload);
     } else {
-      addTask(payload as Omit<Task, "id" | "createdAt" | "updatedAt">);
+      const created = addTask(payload as Omit<Task, "id" | "createdAt" | "updatedAt">);
+      onSaved?.(created);
     }
     onClose();
   };
@@ -188,8 +192,8 @@ export default function TaskModal({ open, onClose, task, prefill }: Props) {
                 </select>
               </div>
               <div>
-                <label className={labelClass}>Ziel-KW / Deadline</label>
-                <input className={inputClass} placeholder="z. B. KW 34" value={form.zielKW} onChange={(e) => set("zielKW", e.target.value)} />
+                <label className={labelClass}>Deadline</label>
+                <input type="date" className={inputClass} value={form.deadline} onChange={(e) => set("deadline", e.target.value)} />
               </div>
             </div>
 

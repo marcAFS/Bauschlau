@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { CalendarClock, Hourglass, Package, CheckCircle2, TriangleAlert } from "lucide-react";
 import { useBauSchlauStore } from "@/lib/store";
 import { empfehleFolgeaufgabe } from "@/lib/ai-simulator";
-import { MATERIAL_STATUS_LABEL, MATERIAL_STATUS_STYLES } from "@/lib/ui-helpers";
+import { MATERIAL_STATUS_LABEL, MATERIAL_STATUS_STYLES, formatDate } from "@/lib/ui-helpers";
 import { BEREICH_LABEL } from "@/lib/types";
 
 function tageSeit(iso: string): number {
@@ -94,7 +94,7 @@ export default function TimelineModule() {
                   </div>
                   <div className="mt-1.5 flex flex-wrap gap-x-3 text-xs text-zinc-500">
                     {t.lieferzeitTage !== undefined && <span>Lieferzeit: {t.lieferzeitTage} Tage</span>}
-                    {t.zielKW && <span>Ziel: {t.zielKW}</span>}
+                    {t.deadline && <span>Deadline: {formatDate(t.deadline)}</span>}
                   </div>
                   {warnung && (
                     <div className="mt-2 flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs text-red-300">

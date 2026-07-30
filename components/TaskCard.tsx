@@ -10,6 +10,7 @@ import {
   PRIORITAET_LABEL,
   MATERIAL_STATUS_LABEL,
   MATERIAL_STATUS_STYLES,
+  formatDate,
 } from "@/lib/ui-helpers";
 import DiyDetailModal from "./DiyDetailModal";
 
@@ -59,9 +60,9 @@ export default function TaskCard({ task, onEdit }: Props) {
             <Ruler className="h-3.5 w-3.5" /> {task.flaeche} m²
           </span>
         )}
-        {task.zielKW && (
+        {task.deadline && (
           <span className="flex items-center gap-1">
-            <CalendarDays className="h-3.5 w-3.5" /> {task.zielKW}
+            <CalendarDays className="h-3.5 w-3.5" /> {formatDate(task.deadline)}
           </span>
         )}
       </div>
