@@ -27,6 +27,22 @@ function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
+// Dezente Wochenend-Schattierung als sich wiederholender Hintergrund (Sa+So),
+// ausgerichtet am Wochentag von rangeStart – vermeidet zusätzliche DOM-Knoten
+// und Stacking-Probleme mit den absolut positionierten Balken.
+function weekendBackground(rangeStartDow: number): string {
+  const stops: string[] = [];
+  for (let c = 0; c < 7; c++) {
+    const weekday = (rangeStartDow + c) % 7;
+    const isWeekend = weekday === 0 || weekday === 6;
+    const color = isWeekend ? "rgba(255,255,255,0.035)" : "transparent";
+    const from = c * PX_PER_DAY;
+    const to = from + PX_PER_DAY;
+    stops.push(`${color} ${from}px`, `${color} ${to}px`);
+  }
+  return `repeating-linear-gradient(to right, ${stops.join(", ")})`;
+}
+
 function GanttChart({ tasks }: { tasks: Task[] }) {
   const items = useMemo(() => {
     return tasks
@@ -64,6 +80,13 @@ function GanttChart({ tasks }: { tasks: Task[] }) {
     });
   }
 
+  const days: { label: string; left: number }[] = [];
+  for (let i = 0; i < totalDays; i++) {
+    const d = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), rangeStart.getDate() + i);
+    days.push({ label: String(d.getDate()), left: i * PX_PER_DAY });
+  }
+
+  const weekendBg = weekendBackground(rangeStart.getDay());
   const todayOffset = dayOffset(startOfDay(new Date())) * PX_PER_DAY;
   const showToday = todayOffset >= 0 && todayOffset <= chartWidth;
 
@@ -81,21 +104,34 @@ function GanttChart({ tasks }: { tasks: Task[] }) {
         <div style={{ minWidth: chartWidth + LABEL_COL_WIDTH }}>
           <div className="relative flex border-b border-zinc-800 text-xs text-zinc-500">
             <div
-              className="sticky left-0 z-20 shrink-0 border-r border-zinc-800 bg-zinc-900 px-3 py-2 font-medium text-zinc-400"
+              className="sticky left-0 z-20 flex shrink-0 items-center border-r border-zinc-800 bg-zinc-900 px-3 font-medium text-zinc-400"
               style={{ width: LABEL_COL_WIDTH }}
             >
               Aufgabe
             </div>
-            <div className="relative" style={{ width: chartWidth, height: 32 }}>
-              {months.map((m, i) => (
-                <div
-                  key={i}
-                  className="absolute top-0 flex h-8 items-center border-l border-zinc-800 pl-1.5 whitespace-nowrap"
-                  style={{ left: m.left, width: m.width }}
-                >
-                  {m.label}
-                </div>
-              ))}
+            <div style={{ width: chartWidth }}>
+              <div className="relative" style={{ height: 24 }}>
+                {months.map((m, i) => (
+                  <div
+                    key={i}
+                    className="absolute top-0 flex h-6 items-center border-l border-zinc-800 pl-1.5 whitespace-nowrap"
+                    style={{ left: m.left, width: m.width }}
+                  >
+                    {m.label}
+                  </div>
+                ))}
+              </div>
+              <div className="relative border-t border-zinc-800/60" style={{ height: 20, backgroundImage: weekendBg }}>
+                {days.map((d, i) => (
+                  <div
+                    key={i}
+                    className="absolute top-0 flex items-center justify-center text-[10px] text-zinc-600"
+                    style={{ left: d.left, width: PX_PER_DAY, height: 20 }}
+                  >
+                    {d.label}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -119,7 +155,7 @@ function GanttChart({ tasks }: { tasks: Task[] }) {
                   >
                     {task.title}
                   </div>
-                  <div className="relative" style={{ width: chartWidth }}>
+                  <div className="relative" style={{ width: chartWidth, backgroundImage: weekendBg }}>
                     <div
                       className={`absolute top-2 flex h-6 items-center overflow-hidden rounded-md px-2 text-[11px] font-medium whitespace-nowrap text-zinc-950 ${GANTT_BAR_COLOR[task.status]}`}
                       style={{ left, width }}
