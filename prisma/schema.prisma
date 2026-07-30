@@ -1,0 +1,120 @@
+// Bau-Schlau Datenbankschema (PostgreSQL via Prisma 7 Driver-Adapter)
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Task {
+  id                String    @id
+  title             String
+  description       String
+  bereich           String
+  gewerk            String
+  status            String
+  ausfuehrung       String
+  kontakt           Json?
+  flaeche           Float?
+  prioritaet        String
+  zielKW            String?
+  materialStatus    String?
+  lieferzeitTage    Int?
+  sperrfristBisTag  Int?
+  sperrfristNotiz   String?
+  budgetSoll        Float?
+  budgetIst         Float?
+  diyDetails        Json?
+  wunschId          String?
+  createdAt         DateTime
+  updatedAt         DateTime
+  erledigtAm        DateTime?
+
+  @@index([bereich])
+  @@index([status])
+}
+
+model Wunsch {
+  id          String   @id
+  text        String
+  analyse     Json?
+  uebernommen Boolean  @default(false)
+  createdAt   DateTime
+}
+
+model RaumProfil {
+  id                String   @id
+  raumName          String
+  etage             String
+  daemmungMm        Int
+  fbhMm             Int
+  estrichMm         Int
+  belagMm           Int
+  rohdeckeHoeheMm   Int?
+  tuerRohbauHoeheMm Int?
+  fensterBrhRohMm   Int?
+  createdAt         DateTime
+}
+
+model Protokoll {
+  id          String   @id
+  quelle      String
+  text        String
+  extraktion  Json?
+  uebernommen Boolean  @default(false)
+  createdAt   DateTime
+}
+
+model Foto {
+  id      String   @id
+  taskId  String?
+  bereich String?
+  typ     String
+  dataUrl String
+  datum   DateTime
+  notiz   String?
+}
+
+model Rechnung {
+  id               String   @id
+  taskId           String?
+  dateiName        String
+  dataUrl          String
+  betrag           Float?
+  datum            DateTime
+  gewerk           String?
+  wohneinheit      String
+  absetzbarkeit    String
+  absetzbarProzent Int?
+  foerderung       String
+}
+
+model Angebot {
+  id                      String   @id
+  taskId                  String?
+  handwerkerName          String
+  dateiName               String?
+  dataUrl                 String?
+  freitext                String?
+  summe                   Float?
+  analyseHinweise         String[] @default([])
+  analyseVersteckteKosten String[] @default([])
+  erstelltAm              DateTime
+}
+
+model BautagebuchEintrag {
+  id      String   @id
+  datum   DateTime
+  text    String
+  taskIds String[] @default([])
+}
+
+model MangelChatMessage {
+  id        String   @id
+  role      String
+  text      String
+  createdAt DateTime
+}
