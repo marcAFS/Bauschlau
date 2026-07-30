@@ -77,6 +77,7 @@ interface BauSchlauState {
 
   addProtokoll: (protokoll: Omit<Protokoll, "id" | "createdAt">) => Protokoll;
   updateProtokoll: (id: string, patch: Partial<Protokoll>) => void;
+  deleteProtokoll: (id: string) => void;
 
   addFoto: (foto: Omit<Foto, "id">) => Foto;
   deleteFoto: (id: string) => void;
@@ -221,6 +222,10 @@ export const useBauSchlauStore = create<BauSchlauState>()(
           protokolle: s.protokolle.map((p) => (p.id === id ? { ...p, ...patch } : p)),
         }));
         api.protokolle.update(id, patch).catch(onSyncFail(set, "Änderung konnte nicht gespeichert werden."));
+      },
+      deleteProtokoll: (id) => {
+        set((s) => ({ protokolle: s.protokolle.filter((p) => p.id !== id) }));
+        api.protokolle.remove(id).catch(onSyncFail(set, "Löschen konnte nicht gespeichert werden."));
       },
 
       addFoto: (foto) => {

@@ -41,6 +41,7 @@ export const api = {
   protokolle: {
     create: (data: unknown) => post("/api/protokolle", data),
     update: (id: string, data: unknown) => patch(`/api/protokolle/${id}`, data),
+    remove: (id: string) => del(`/api/protokolle/${id}`),
   },
   fotos: {
     create: (data: unknown) => post("/api/fotos", data),

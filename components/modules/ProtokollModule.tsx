@@ -1,7 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import { Mic, Sparkles, ClipboardCheck, ScrollText, CalendarClock, CheckCircle2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import {
+  Mic,
+  Sparkles,
+  ClipboardCheck,
+  ScrollText,
+  CalendarClock,
+  CheckCircle2,
+  ChevronDown,
+  Trash2,
+} from "lucide-react";
 import { useBauSchlauStore } from "@/lib/store";
 import { api } from "@/lib/api-client";
 import { BEREICH_LABEL } from "@/lib/types";
@@ -11,11 +20,14 @@ const QUELLEN: Protokoll["quelle"][] = ["Schornsteinfeger", "Energieberater", "H
 
 function ProtokollCard({ protokoll }: { protokoll: Protokoll }) {
   const addTask = useBauSchlauStore((s) => s.addTask);
-  const updateProtokoll = useBauSchlauStore((s) => s.updateProtokoll);
+  const deleteProtokoll = useBauSchlauStore((s) => s.deleteProtokoll);
   const [uebernommenIdx, setUebernommenIdx] = useState<Set<number>>(new Set());
+  const [open, setOpen] = useState(false);
 
-  if (!protokoll.extraktion) return null;
-  const { aufgaben, auflagen, termine } = protokoll.extraktion;
+  const extraktion = protokoll.extraktion;
+  const aufgaben = extraktion?.aufgaben ?? [];
+  const auflagen = extraktion?.auflagen ?? [];
+  const termine = extraktion?.termine ?? [];
 
   const uebernehmen = (idx: number) => {
     const a = aufgaben[idx];
@@ -32,65 +44,86 @@ function ProtokollCard({ protokoll }: { protokoll: Protokoll }) {
   };
 
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <span className="rounded-full bg-zinc-800 px-2.5 py-1 text-xs font-medium text-zinc-300">{protokoll.quelle}</span>
-        <span className="text-xs text-zinc-500">{new Date(protokoll.createdAt).toLocaleString("de-DE")}</span>
-      </div>
-      <p className="mb-4 whitespace-pre-wrap text-sm text-zinc-400">{protokoll.text}</p>
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left"
+      >
+        <ChevronDown className={`h-4 w-4 shrink-0 text-zinc-500 transition-transform ${open ? "rotate-180" : ""}`} />
+        <span className="shrink-0 rounded-full bg-zinc-800 px-2.5 py-1 text-xs font-medium text-zinc-300">{protokoll.quelle}</span>
+        <span className="min-w-0 flex-1 truncate text-sm text-zinc-400">{protokoll.text}</span>
+        <span className="shrink-0 text-xs text-zinc-500">{new Date(protokoll.createdAt).toLocaleDateString("de-DE")}</span>
+        <span
+          onClick={(e) => {
+            e.stopPropagation();
+            deleteProtokoll(protokoll.id);
+          }}
+          role="button"
+          tabIndex={0}
+          className="shrink-0 rounded-lg p-1.5 text-zinc-500 hover:bg-red-500/10 hover:text-red-400"
+        >
+          <Trash2 className="h-4 w-4" />
+        </span>
+      </button>
 
-      <div className="space-y-4">
-        {aufgaben.length > 0 && (
-          <div>
-            <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
-              <ClipboardCheck className="h-3.5 w-3.5" /> Neue Aufgaben
-            </div>
-            <ul className="space-y-1.5">
-              {aufgaben.map((a, i) => (
-                <li key={i} className="flex items-center justify-between gap-2 rounded-lg bg-zinc-950/60 px-2.5 py-1.5 text-sm">
-                  <span className="text-zinc-300">
-                    {a.titel} <span className="text-xs text-zinc-500">· {BEREICH_LABEL[a.bereich]}</span>
-                  </span>
-                  {uebernommenIdx.has(i) ? (
-                    <span className="flex shrink-0 items-center gap-1 text-xs text-emerald-400"><CheckCircle2 className="h-3.5 w-3.5" /> Übernommen</span>
-                  ) : (
-                    <button onClick={() => uebernehmen(i)} className="shrink-0 rounded-lg bg-orange-500/15 px-2 py-1 text-xs font-medium text-orange-400 hover:bg-orange-500/25">
-                      Übernehmen
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+      {open && (
+        <div className="border-t border-zinc-800 px-4 py-4">
+          <p className="mb-4 whitespace-pre-wrap text-sm text-zinc-400">{protokoll.text}</p>
 
-        {auflagen.length > 0 && (
-          <div>
-            <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-amber-400">
-              <ScrollText className="h-3.5 w-3.5" /> Auflagen &amp; Norm-Hinweise
-            </div>
-            <ul className="space-y-1 text-sm text-zinc-300">
-              {auflagen.map((a, i) => <li key={i} className="flex gap-2"><span className="text-zinc-600">–</span>{a}</li>)}
-            </ul>
-          </div>
-        )}
+          <div className="space-y-4">
+            {aufgaben.length > 0 && (
+              <div>
+                <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
+                  <ClipboardCheck className="h-3.5 w-3.5" /> Neue Aufgaben
+                </div>
+                <ul className="space-y-1.5">
+                  {aufgaben.map((a, i) => (
+                    <li key={i} className="flex items-center justify-between gap-2 rounded-lg bg-zinc-950/60 px-2.5 py-1.5 text-sm">
+                      <span className="text-zinc-300">
+                        {a.titel} <span className="text-xs text-zinc-500">· {BEREICH_LABEL[a.bereich]}</span>
+                      </span>
+                      {uebernommenIdx.has(i) ? (
+                        <span className="flex shrink-0 items-center gap-1 text-xs text-emerald-400"><CheckCircle2 className="h-3.5 w-3.5" /> Übernommen</span>
+                      ) : (
+                        <button onClick={() => uebernehmen(i)} className="shrink-0 rounded-lg bg-orange-500/15 px-2 py-1 text-xs font-medium text-orange-400 hover:bg-orange-500/25">
+                          Übernehmen
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
-        {termine.length > 0 && (
-          <div>
-            <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-blue-400">
-              <CalendarClock className="h-3.5 w-3.5" /> Wichtige Termine / Fristen
-            </div>
-            <ul className="space-y-1 text-sm text-zinc-300">
-              {termine.map((t, i) => (
-                <li key={i} className="flex gap-2">
-                  <span className="text-zinc-600">–</span>{t.text}
-                  {t.datum && <span className="rounded bg-blue-500/15 px-1.5 text-xs text-blue-300">{t.datum}</span>}
-                </li>
-              ))}
-            </ul>
+            {auflagen.length > 0 && (
+              <div>
+                <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-amber-400">
+                  <ScrollText className="h-3.5 w-3.5" /> Auflagen &amp; Norm-Hinweise
+                </div>
+                <ul className="space-y-1 text-sm text-zinc-300">
+                  {auflagen.map((a, i) => <li key={i} className="flex gap-2"><span className="text-zinc-600">–</span>{a}</li>)}
+                </ul>
+              </div>
+            )}
+
+            {termine.length > 0 && (
+              <div>
+                <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-blue-400">
+                  <CalendarClock className="h-3.5 w-3.5" /> Wichtige Termine / Fristen
+                </div>
+                <ul className="space-y-1 text-sm text-zinc-300">
+                  {termine.map((t, i) => (
+                    <li key={i} className="flex gap-2">
+                      <span className="text-zinc-600">–</span>{t.text}
+                      {t.datum && <span className="rounded bg-blue-500/15 px-1.5 text-xs text-blue-300">{t.datum}</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -101,6 +134,7 @@ export default function ProtokollModule() {
   const [text, setText] = useState("");
   const [quelle, setQuelle] = useState<Protokoll["quelle"]>("Handwerker");
   const [loading, setLoading] = useState(false);
+  const [filter, setFilter] = useState<Protokoll["quelle"] | "alle">("alle");
 
   const verarbeiten = async () => {
     if (!text.trim()) return;
@@ -113,6 +147,11 @@ export default function ProtokollModule() {
       setLoading(false);
     }
   };
+
+  const gefiltert = useMemo(
+    () => (filter === "alle" ? protokolle : protokolle.filter((p) => p.quelle === filter)),
+    [protokolle, filter]
+  );
 
   return (
     <div className="space-y-6">
@@ -155,10 +194,41 @@ export default function ProtokollModule() {
         </button>
       </div>
 
-      <div className="space-y-3">
-        {protokolle.map((p) => (
+      {protokolle.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            onClick={() => setFilter("alle")}
+            className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+              filter === "alle" ? "border-orange-500/50 bg-orange-500/10 text-orange-400" : "border-zinc-800 text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            Alle ({protokolle.length})
+          </button>
+          {QUELLEN.map((q) => {
+            const count = protokolle.filter((p) => p.quelle === q).length;
+            if (count === 0) return null;
+            return (
+              <button
+                key={q}
+                onClick={() => setFilter(q)}
+                className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                  filter === q ? "border-orange-500/50 bg-orange-500/10 text-orange-400" : "border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                {q} ({count})
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {gefiltert.map((p) => (
           <ProtokollCard key={p.id} protokoll={p} />
         ))}
+        {protokolle.length > 0 && gefiltert.length === 0 && (
+          <p className="text-sm text-zinc-500">Keine Protokolle mit diesem Filter.</p>
+        )}
       </div>
     </div>
   );
