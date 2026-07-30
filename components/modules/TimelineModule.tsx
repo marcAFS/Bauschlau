@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { CalendarClock, Hourglass, Package, CheckCircle2, TriangleAlert, GanttChartSquare } from "lucide-react";
 import { useBauSchlauStore } from "@/lib/store";
 import { empfehleFolgeaufgabe } from "@/lib/ai-simulator";
 import { MATERIAL_STATUS_LABEL, MATERIAL_STATUS_STYLES, formatDate } from "@/lib/ui-helpers";
 import { BEREICH_LABEL, TASK_STATUS_LABEL, type Task, type TaskStatus } from "@/lib/types";
+import TaskModal from "@/components/TaskModal";
 
 function tageSeit(iso: string): number {
   return Math.floor((Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24));
@@ -45,6 +46,8 @@ function weekendBackground(rangeStartDow: number): string {
 }
 
 function GanttChart({ tasks }: { tasks: Task[] }) {
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+
   const items = useMemo(() => {
     return tasks
       .filter((t) => t.startDatum && t.deadline)
@@ -149,13 +152,14 @@ function GanttChart({ tasks }: { tasks: Task[] }) {
               const width = Math.max(PX_PER_DAY, (dayOffset(end) - dayOffset(start) + 1) * PX_PER_DAY);
               return (
                 <div key={task.id} className="flex border-b border-zinc-800/60 last:border-0" style={{ height: ROW_HEIGHT }}>
-                  <div
-                    className="sticky left-0 z-20 flex shrink-0 items-center border-r border-zinc-800 bg-zinc-900/95 px-3 py-1.5 text-sm text-zinc-300"
+                  <button
+                    onClick={() => setEditingTask(task)}
+                    className="sticky left-0 z-20 flex shrink-0 items-center border-r border-zinc-800 bg-zinc-900/95 px-3 py-1.5 text-left text-sm text-zinc-300 hover:bg-zinc-800/80 hover:text-orange-400"
                     style={{ width: LABEL_COL_WIDTH }}
                     title={task.title}
                   >
                     <span className="line-clamp-2 leading-tight">{task.title}</span>
-                  </div>
+                  </button>
                   <div className="relative" style={{ width: chartWidth, backgroundImage: weekendBg }}>
                     <div
                       className={`absolute top-4 flex h-6 items-center overflow-hidden rounded-md px-2 text-[11px] font-medium whitespace-nowrap text-zinc-950 ${GANTT_BAR_COLOR[task.status]}`}
@@ -171,6 +175,8 @@ function GanttChart({ tasks }: { tasks: Task[] }) {
           </div>
         </div>
       </div>
+
+      <TaskModal open={editingTask !== null} task={editingTask} onClose={() => setEditingTask(null)} />
     </div>
   );
 }
