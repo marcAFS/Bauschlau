@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarClock, Hourglass, Package, CheckCircle2, TriangleAlert, GanttChartSquare } from "lucide-react";
 import { useBauSchlauStore } from "@/lib/store";
 import { empfehleFolgeaufgabe } from "@/lib/ai-simulator";
@@ -21,9 +21,16 @@ const GANTT_BAR_COLOR: Record<TaskStatus, string> = {
 };
 
 const DAY_MS = 86400000;
-const PX_PER_DAY = 28;
 const LABEL_COL_WIDTH = 240;
-const ROW_HEIGHT = 56;
+
+const ZOOM_LEVELS = [
+  { key: "monat", label: "Monat", pxPerDay: 32 },
+  { key: "2monate", label: "2 Monate", pxPerDay: 18 },
+  { key: "3monate", label: "3 Monate", pxPerDay: 12 },
+  { key: "halbjahr", label: "Halbjahr", pxPerDay: 6 },
+  { key: "jahr", label: "Jahr", pxPerDay: 3 },
+] as const;
+type ZoomKey = (typeof ZOOM_LEVELS)[number]["key"];
 
 function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -32,14 +39,14 @@ function startOfDay(d: Date): Date {
 // Dezente Wochenend-Schattierung als sich wiederholender Hintergrund (Sa+So),
 // ausgerichtet am Wochentag von rangeStart – vermeidet zusätzliche DOM-Knoten
 // und Stacking-Probleme mit den absolut positionierten Balken.
-function weekendBackground(rangeStartDow: number): string {
+function weekendBackground(rangeStartDow: number, pxPerDay: number): string {
   const stops: string[] = [];
   for (let c = 0; c < 7; c++) {
     const weekday = (rangeStartDow + c) % 7;
     const isWeekend = weekday === 0 || weekday === 6;
     const color = isWeekend ? "rgba(255,255,255,0.035)" : "transparent";
-    const from = c * PX_PER_DAY;
-    const to = from + PX_PER_DAY;
+    const from = c * pxPerDay;
+    const to = from + pxPerDay;
     stops.push(`${color} ${from}px`, `${color} ${to}px`);
   }
   return `repeating-linear-gradient(to right, ${stops.join(", ")})`;
@@ -47,6 +54,10 @@ function weekendBackground(rangeStartDow: number): string {
 
 function GanttChart({ tasks }: { tasks: Task[] }) {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [zoom, setZoom] = useState<ZoomKey>("monat");
+  const pxPerDay = ZOOM_LEVELS.find((z) => z.key === zoom)!.pxPerDay;
+  const showDayNumbers = pxPerDay >= 12;
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const items = useMemo(() => {
     return tasks
@@ -56,7 +67,41 @@ function GanttChart({ tasks }: { tasks: Task[] }) {
       .sort((a, b) => a.start.getTime() - b.start.getTime());
   }, [tasks]);
 
-  if (items.length === 0) {
+  const rangeStart = useMemo(() => {
+    if (items.length === 0) return null;
+    const earliestStart = new Date(Math.min(...items.map((i) => i.start.getTime())));
+    return new Date(earliestStart.getFullYear(), earliestStart.getMonth(), 1);
+  }, [items]);
+  const rangeEndExclusive = useMemo(() => {
+    if (items.length === 0) return null;
+    const latestEnd = new Date(Math.max(...items.map((i) => i.end.getTime())));
+    return new Date(latestEnd.getFullYear(), latestEnd.getMonth() + 1, 1);
+  }, [items]);
+
+  const totalDays =
+    rangeStart && rangeEndExclusive ? Math.max(1, Math.round((rangeEndExclusive.getTime() - rangeStart.getTime()) / DAY_MS)) : 0;
+  const chartWidth = totalDays * pxPerDay;
+  const dayOffset = (d: Date) => (rangeStart ? Math.round((d.getTime() - rangeStart.getTime()) / DAY_MS) : 0);
+  const todayOffset = dayOffset(startOfDay(new Date())) * pxPerDay;
+
+  const jumpToToday = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const visibleChartWidth = Math.max(0, el.clientWidth - LABEL_COL_WIDTH);
+    const target = Math.max(0, todayOffset - visibleChartWidth / 2);
+    el.scrollTo({ left: target, behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    if (items.length === 0) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    const visibleChartWidth = Math.max(0, el.clientWidth - LABEL_COL_WIDTH);
+    el.scrollLeft = Math.max(0, todayOffset - visibleChartWidth / 2);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoom, items.length]);
+
+  if (items.length === 0 || !rangeStart || !rangeEndExclusive) {
     return (
       <p className="text-sm text-zinc-500">
         Noch keine Aufgaben mit Start-Datum <span className="text-zinc-400">und</span> Deadline. Trag bei einer Aufgabe
@@ -65,46 +110,64 @@ function GanttChart({ tasks }: { tasks: Task[] }) {
     );
   }
 
-  const earliestStart = new Date(Math.min(...items.map((i) => i.start.getTime())));
-  const latestEnd = new Date(Math.max(...items.map((i) => i.end.getTime())));
-  const rangeStart = new Date(earliestStart.getFullYear(), earliestStart.getMonth(), 1);
-  const rangeEndExclusive = new Date(latestEnd.getFullYear(), latestEnd.getMonth() + 1, 1);
-  const totalDays = Math.max(1, Math.round((rangeEndExclusive.getTime() - rangeStart.getTime()) / DAY_MS));
-  const chartWidth = totalDays * PX_PER_DAY;
-  const dayOffset = (d: Date) => Math.round((d.getTime() - rangeStart.getTime()) / DAY_MS);
-
   const months: { label: string; left: number; width: number }[] = [];
   for (let cursor = new Date(rangeStart); cursor < rangeEndExclusive; cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)) {
     const monthEndExclusive = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
     const daysInMonth = Math.round((monthEndExclusive.getTime() - cursor.getTime()) / DAY_MS);
     months.push({
       label: cursor.toLocaleDateString("de-DE", { month: "short", year: "2-digit" }),
-      left: dayOffset(cursor) * PX_PER_DAY,
-      width: daysInMonth * PX_PER_DAY,
+      left: dayOffset(cursor) * pxPerDay,
+      width: daysInMonth * pxPerDay,
     });
   }
 
   const days: { label: string; left: number }[] = [];
-  for (let i = 0; i < totalDays; i++) {
-    const d = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), rangeStart.getDate() + i);
-    days.push({ label: String(d.getDate()), left: i * PX_PER_DAY });
+  if (showDayNumbers) {
+    for (let i = 0; i < totalDays; i++) {
+      const d = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), rangeStart.getDate() + i);
+      days.push({ label: String(d.getDate()), left: i * pxPerDay });
+    }
   }
 
-  const weekendBg = weekendBackground(rangeStart.getDay());
-  const todayOffset = dayOffset(startOfDay(new Date())) * PX_PER_DAY;
+  const weekendBg = weekendBackground(rangeStart.getDay(), pxPerDay);
   const showToday = todayOffset >= 0 && todayOffset <= chartWidth;
+  const dayRowHeight = showDayNumbers ? 20 : 0;
 
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-zinc-400">
-        {Object.entries(TASK_STATUS_LABEL).map(([status, label]) => (
-          <span key={status} className="flex items-center gap-1.5">
-            <span className={`h-2.5 w-2.5 rounded-sm ${GANTT_BAR_COLOR[status as TaskStatus]}`} />
-            {label}
-          </span>
-        ))}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-400">
+          {Object.entries(TASK_STATUS_LABEL).map(([status, label]) => (
+            <span key={status} className="flex items-center gap-1.5">
+              <span className={`h-2.5 w-2.5 rounded-sm ${GANTT_BAR_COLOR[status as TaskStatus]}`} />
+              {label}
+            </span>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex rounded-lg border border-zinc-800 p-0.5">
+            {ZOOM_LEVELS.map((z) => (
+              <button
+                key={z.key}
+                onClick={() => setZoom(z.key)}
+                className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
+                  zoom === z.key ? "bg-orange-500/15 text-orange-400" : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                {z.label}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={jumpToToday}
+            className="rounded-lg border border-zinc-800 px-2.5 py-1 text-xs font-medium text-zinc-400 hover:text-zinc-200"
+          >
+            Heute
+          </button>
+        </div>
       </div>
-      <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-900/40">
+
+      <div ref={scrollRef} className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-900/40">
         <div style={{ minWidth: chartWidth + LABEL_COL_WIDTH }}>
           <div className="relative flex border-b border-zinc-800 text-xs text-zinc-500">
             <div
@@ -125,17 +188,19 @@ function GanttChart({ tasks }: { tasks: Task[] }) {
                   </div>
                 ))}
               </div>
-              <div className="relative border-t border-zinc-800/60" style={{ height: 20, backgroundImage: weekendBg }}>
-                {days.map((d, i) => (
-                  <div
-                    key={i}
-                    className="absolute top-0 flex items-center justify-center text-[10px] text-zinc-600"
-                    style={{ left: d.left, width: PX_PER_DAY, height: 20 }}
-                  >
-                    {d.label}
-                  </div>
-                ))}
-              </div>
+              {showDayNumbers && (
+                <div className="relative border-t border-zinc-800/60" style={{ height: dayRowHeight, backgroundImage: weekendBg }}>
+                  {days.map((d, i) => (
+                    <div
+                      key={i}
+                      className="absolute top-0 flex items-center justify-center text-[10px] text-zinc-600"
+                      style={{ left: d.left, width: pxPerDay, height: dayRowHeight }}
+                    >
+                      {d.label}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -148,25 +213,25 @@ function GanttChart({ tasks }: { tasks: Task[] }) {
               />
             )}
             {items.map(({ task, start, end }) => {
-              const left = dayOffset(start) * PX_PER_DAY;
-              const width = Math.max(PX_PER_DAY, (dayOffset(end) - dayOffset(start) + 1) * PX_PER_DAY);
+              const left = dayOffset(start) * pxPerDay;
+              const width = Math.max(pxPerDay, (dayOffset(end) - dayOffset(start) + 1) * pxPerDay);
               return (
-                <div key={task.id} className="flex border-b border-zinc-800/60 last:border-0" style={{ height: ROW_HEIGHT }}>
+                <div key={task.id} className="flex border-b border-zinc-800/60 last:border-0">
                   <button
                     onClick={() => setEditingTask(task)}
-                    className="sticky left-0 z-20 flex shrink-0 items-center border-r border-zinc-800 bg-zinc-900/95 px-3 py-1.5 text-left text-sm text-zinc-300 hover:bg-zinc-800/80 hover:text-orange-400"
+                    className="sticky left-0 z-20 flex shrink-0 items-center border-r border-zinc-800 bg-zinc-900/95 px-3 py-2 text-left text-sm text-zinc-300 hover:bg-zinc-800/80 hover:text-orange-400"
                     style={{ width: LABEL_COL_WIDTH }}
                     title={task.title}
                   >
-                    <span className="line-clamp-2 leading-tight">{task.title}</span>
+                    <span className="leading-snug">{task.title}</span>
                   </button>
                   <div className="relative" style={{ width: chartWidth, backgroundImage: weekendBg }}>
                     <div
-                      className={`absolute top-4 flex h-6 items-center overflow-hidden rounded-md px-2 text-[11px] font-medium whitespace-nowrap text-zinc-950 ${GANTT_BAR_COLOR[task.status]}`}
+                      className={`absolute top-1/2 flex h-6 -translate-y-1/2 items-center overflow-hidden rounded-md px-2 text-[11px] font-medium whitespace-nowrap text-zinc-950 ${GANTT_BAR_COLOR[task.status]}`}
                       style={{ left, width }}
                       title={`${task.title}: ${formatDate(task.startDatum!)} – ${formatDate(task.deadline!)}`}
                     >
-                      {BEREICH_LABEL[task.bereich]}
+                      {pxPerDay >= 10 && BEREICH_LABEL[task.bereich]}
                     </div>
                   </div>
                 </div>
