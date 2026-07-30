@@ -103,6 +103,7 @@ export interface Task {
   kontakt?: Kontakt;
   flaeche?: number;
   prioritaet: Prioritaet;
+  startDatum?: string; // ISO-Datum (YYYY-MM-DD)
   deadline?: string; // ISO-Datum (YYYY-MM-DD)
   materialStatus?: MaterialStatus;
   lieferzeitTage?: number;

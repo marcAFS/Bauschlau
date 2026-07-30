@@ -46,5 +46,6 @@ next-env.d.ts
 # Prisma CLI agent-skill docs (local reference only, not app code)
 /.agents/
 /.claude/skills/
+/.claude/*.lock
 /.windsurf/
 skills-lock.json

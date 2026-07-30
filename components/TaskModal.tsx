@@ -29,6 +29,7 @@ const emptyForm = (prefill?: Partial<Task> | null) => ({
   kontaktEmail: prefill?.kontakt?.email ?? "",
   flaeche: prefill?.flaeche?.toString() ?? "",
   prioritaet: (prefill?.prioritaet ?? "mittel") as Prioritaet,
+  startDatum: prefill?.startDatum ? prefill.startDatum.slice(0, 10) : "",
   deadline: prefill?.deadline ? prefill.deadline.slice(0, 10) : "",
   materialStatus: prefill?.materialStatus ?? ("" as MaterialStatus | ""),
   lieferzeitTage: prefill?.lieferzeitTage?.toString() ?? "",
@@ -76,6 +77,7 @@ export default function TaskModal({ open, onClose, task, prefill, onSaved }: Pro
           : undefined,
       flaeche: form.flaeche ? Number(form.flaeche) : undefined,
       prioritaet: form.prioritaet,
+      startDatum: form.startDatum || undefined,
       deadline: form.deadline || undefined,
       materialStatus: form.materialStatus || undefined,
       lieferzeitTage: form.lieferzeitTage ? Number(form.lieferzeitTage) : undefined,
@@ -178,7 +180,7 @@ export default function TaskModal({ open, onClose, task, prefill, onSaved }: Pro
               </div>
             )}
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               <div>
                 <label className={labelClass}>Raumgröße (m²)</label>
                 <input type="number" step="0.1" className={inputClass} value={form.flaeche} onChange={(e) => set("flaeche", e.target.value)} />
@@ -190,6 +192,13 @@ export default function TaskModal({ open, onClose, task, prefill, onSaved }: Pro
                   <option value="mittel">Mittel</option>
                   <option value="hoch">Hoch</option>
                 </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelClass}>Start-Datum</label>
+                <input type="date" className={inputClass} value={form.startDatum} onChange={(e) => set("startDatum", e.target.value)} />
               </div>
               <div>
                 <label className={labelClass}>Deadline</label>
