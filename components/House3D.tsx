@@ -111,6 +111,32 @@ function Segment({ bereich, status, geometry, position, rotation, active, hovere
   );
 }
 
+// Proportionen aus dem realen Baugesuch (Wohnhausneubau mit Garage, Schrozberg 1997):
+// Hauptbaukörper ca. 13,90 x 9,95 m, First quer zur Breite; Dachneigung DN 30°.
+// Doppelgarage ca. 8,00 x 7,52 m, eigener First quer zur Tiefe (First zeigt zur Straße).
+const HOUSE_W = 3.6;
+const HOUSE_D = 2.6; // 3.6 * (9.95 / 13.90)
+const KELLER_H = 0.7;
+const EG_H = 1.3;
+const OG_H = 0.55; // Kniestock im ausgebauten Dachgeschoss
+const ROOF_RIDGE_H = HOUSE_D * 0.5 * Math.tan((30 * Math.PI) / 180); // DN 30°
+
+const GARAGE_W = 2.0;
+const GARAGE_D = 1.9; // 8,00 x 7,52 m Verhältnis
+const GARAGE_H = 1.0;
+const GARAGE_ROOF_H = GARAGE_W * 0.5 * Math.tan((30 * Math.PI) / 180);
+const GARAGE_X = HOUSE_W / 2 + 0.1 + GARAGE_W / 2;
+const GARAGE_Z = 0.4;
+
+function gableRoofShape(halfSpan: number, ridgeHeight: number) {
+  const shape = new THREE.Shape();
+  shape.moveTo(-halfSpan, 0);
+  shape.lineTo(0, ridgeHeight);
+  shape.lineTo(halfSpan, 0);
+  shape.lineTo(-halfSpan, 0);
+  return shape;
+}
+
 function HouseModel() {
   const tasks = useBauSchlauStore((s) => s.tasks);
   const aktiverBereichFilter = useBauSchlauStore((s) => s.aktiverBereichFilter);
@@ -131,34 +157,61 @@ function HouseModel() {
     onHover: (v: boolean) => setHovered(v ? bereich : null),
   });
 
+  // First des Hauptdachs läuft entlang der Breite (X) -> Querschnitt liegt in Z/Y,
+  // daher Extrusion entlang Z bauen und anschließend um Y drehen.
+  const mainRoofGeometry = useMemo(() => {
+    const geo = new THREE.ExtrudeGeometry(gableRoofShape(HOUSE_D / 2, ROOF_RIDGE_H), {
+      depth: HOUSE_W,
+      bevelEnabled: false,
+    });
+    geo.translate(0, 0, -HOUSE_W / 2);
+    return geo;
+  }, []);
+
+  // First der Garage läuft entlang der Tiefe (Z) -> Querschnitt liegt bereits in X/Y,
+  // keine Rotation nötig.
+  const garageRoofGeometry = useMemo(() => {
+    const geo = new THREE.ExtrudeGeometry(gableRoofShape(GARAGE_W / 2, GARAGE_ROOF_H), {
+      depth: GARAGE_D,
+      bevelEnabled: false,
+    });
+    geo.translate(0, 0, -GARAGE_D / 2);
+    return geo;
+  }, []);
+
   return (
     <group position={[0, 0.6, 0]}>
       {/* Keller */}
-      <Segment {...segProps("keller")} geometry={<boxGeometry args={[3.6, 0.7, 2.8]} />} position={[0, -0.75, 0]} />
+      <Segment {...segProps("keller")} geometry={<boxGeometry args={[HOUSE_W, KELLER_H, HOUSE_D]} />} position={[0, -0.75, 0]} />
       {/* EG */}
-      <Segment {...segProps("eg")} geometry={<boxGeometry args={[3.6, 1.3, 2.8]} />} position={[0, -0.05, 0]} />
-      {/* OG */}
-      <Segment {...segProps("og")} geometry={<boxGeometry args={[3.6, 1.3, 2.8]} />} position={[0, 1.25, 0]} />
-      {/* Dach */}
+      <Segment {...segProps("eg")} geometry={<boxGeometry args={[HOUSE_W, EG_H, HOUSE_D]} />} position={[0, -0.05, 0]} />
+      {/* OG (Kniestock im Dachgeschoss) */}
+      <Segment {...segProps("og")} geometry={<boxGeometry args={[HOUSE_W, OG_H, HOUSE_D]} />} position={[0, 0.875, 0]} />
+      {/* Dach (Satteldach, First entlang der Hausbreite) */}
       <Segment
         {...segProps("dach")}
-        geometry={<coneGeometry args={[2.7, 1.1, 4]} />}
-        position={[0, 2.45, 0]}
-        rotation={[0, Math.PI / 4, 0]}
+        geometry={<primitive object={mainRoofGeometry} attach="geometry" />}
+        position={[0, 1.15, 0]}
+        rotation={[0, Math.PI / 2, 0]}
       />
-      {/* Garage */}
-      <Segment {...segProps("garage")} geometry={<boxGeometry args={[1.6, 1, 1.7]} />} position={[2.7, -0.5, 0.4]} />
+      {/* Garage inkl. eigenem Satteldach, First quer zur Garage (zeigt zur Straße) */}
+      <Segment {...segProps("garage")} geometry={<boxGeometry args={[GARAGE_W, GARAGE_H, GARAGE_D]} />} position={[GARAGE_X, -0.5, GARAGE_Z]} />
+      <Segment
+        {...segProps("garage")}
+        geometry={<primitive object={garageRoofGeometry} attach="geometry" />}
+        position={[GARAGE_X, 0, GARAGE_Z]}
+      />
       {/* Garten */}
       <Segment
         {...segProps("garten")}
-        geometry={<boxGeometry args={[3.4, 0.06, 2.2]} />}
-        position={[0, -1.16, 2.6]}
+        geometry={<boxGeometry args={[HOUSE_W + GARAGE_W + 0.6, 0.06, HOUSE_D]} />}
+        position={[GARAGE_X * 0.35, -1.16, HOUSE_D / 2]}
       />
       {/* Fassade / Fenster (Front) */}
       <Segment
         {...segProps("fassade")}
-        geometry={<boxGeometry args={[2.6, 2.0, 0.06]} />}
-        position={[0, 0.6, 1.44]}
+        geometry={<boxGeometry args={[HOUSE_W * 0.72, 2.0, 0.06]} />}
+        position={[0, 0.6, HOUSE_D / 2 + 0.04]}
       />
     </group>
   );
