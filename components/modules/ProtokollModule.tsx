@@ -21,7 +21,8 @@ const QUELLEN: Protokoll["quelle"][] = ["Schornsteinfeger", "Energieberater", "H
 
 function ProtokollCard({ protokoll }: { protokoll: Protokoll }) {
   const deleteProtokoll = useBauSchlauStore((s) => s.deleteProtokoll);
-  const [uebernommenIdx, setUebernommenIdx] = useState<Set<number>>(new Set());
+  const updateProtokoll = useBauSchlauStore((s) => s.updateProtokoll);
+  const uebernommenIdx = useMemo(() => new Set(protokoll.uebernommeneIndizes ?? []), [protokoll.uebernommeneIndizes]);
   const [open, setOpen] = useState(false);
   const [modalIdx, setModalIdx] = useState<number | null>(null);
 
@@ -129,7 +130,11 @@ function ProtokollCard({ protokoll }: { protokoll: Protokoll }) {
             : null
         }
         onSaved={() => {
-          if (modalIdx !== null) setUebernommenIdx((prev) => new Set(prev).add(modalIdx));
+          if (modalIdx === null) return;
+          const bisher = protokoll.uebernommeneIndizes ?? [];
+          if (!bisher.includes(modalIdx)) {
+            updateProtokoll(protokoll.id, { uebernommeneIndizes: [...bisher, modalIdx] });
+          }
         }}
       />
     </div>

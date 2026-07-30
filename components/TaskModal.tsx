@@ -58,6 +58,7 @@ export default function TaskModal({ open, onClose, task, prefill, onSaved }: Pro
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.title.trim()) return;
+    if (form.startDatum && form.deadline && form.deadline < form.startDatum) return;
 
     const payload = {
       title: form.title.trim(),
@@ -198,11 +199,28 @@ export default function TaskModal({ open, onClose, task, prefill, onSaved }: Pro
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={labelClass}>Start-Datum</label>
-                <input type="date" className={inputClass} value={form.startDatum} onChange={(e) => set("startDatum", e.target.value)} />
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={form.startDatum}
+                  onChange={(e) => {
+                    const neuesStartDatum = e.target.value;
+                    set("startDatum", neuesStartDatum);
+                    if (neuesStartDatum && form.deadline && form.deadline < neuesStartDatum) {
+                      set("deadline", "");
+                    }
+                  }}
+                />
               </div>
               <div>
                 <label className={labelClass}>Deadline</label>
-                <input type="date" className={inputClass} value={form.deadline} onChange={(e) => set("deadline", e.target.value)} />
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={form.deadline}
+                  min={form.startDatum || undefined}
+                  onChange={(e) => set("deadline", e.target.value)}
+                />
               </div>
             </div>
 

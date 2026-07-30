@@ -61,12 +61,13 @@ model RaumProfil {
 }
 
 model Protokoll {
-  id          String   @id
-  quelle      String
-  text        String
-  extraktion  Json?
-  uebernommen Boolean  @default(false)
-  createdAt   DateTime
+  id                  String   @id
+  quelle              String
+  text                String
+  extraktion          Json?
+  uebernommen         Boolean  @default(false)
+  uebernommeneIndizes Int[]    @default([])
+  createdAt           DateTime
 }
 
 model Foto {

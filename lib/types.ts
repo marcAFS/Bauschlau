@@ -158,6 +158,7 @@ export interface Protokoll {
   text: string;
   extraktion?: ProtokollExtraktion;
   uebernommen: boolean;
+  uebernommeneIndizes?: number[]; // Indizes von extraktion.aufgaben, die schon in Projektplan übernommen wurden
   createdAt: string;
 }
 
