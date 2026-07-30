@@ -6,6 +6,7 @@ import { useBauSchlauStore } from "@/lib/store";
 import { BEREICH_LABEL, type Bereich } from "@/lib/types";
 import { computeBereichStatus, bereichFortschritt } from "@/lib/bereich-status";
 import TaskList from "@/components/TaskList";
+import Cockpit from "@/components/Cockpit";
 
 const House3D = dynamic(() => import("@/components/House3D"), {
   ssr: false,
@@ -27,6 +28,8 @@ export default function DashboardModule() {
 
   return (
     <div className="space-y-6">
+      <Cockpit />
+
       <div>
         <div className="mb-3 flex items-center justify-between">
           <div>
