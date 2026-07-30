@@ -100,85 +100,125 @@ function hexToRgb(hex: string): [number, number, number] {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-// Baut ein echtes PDF client-seitig (jsPDF) und löst direkt einen Download
-// aus – kein Druckdialog, kein Server-Rendering nötig.
+// Baut ein echtes PDF client-seitig (jsPDF, Querformat) und löst direkt einen
+// Download aus – kein Druckdialog, kein Server-Rendering nötig. Die Balken
+// werden auf derselben Tages-Skala wie im Zeitachsen-Kopf (inkl. Wochenend-
+// Markierung) positioniert, damit beides zueinander passt.
 async function downloadGanttPdf(groups: { bereich: Bereich; items: GanttItem[] }[]) {
   const { jsPDF } = await import("jspdf");
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const marginX = 15;
-  const pageWidth = 210;
-  const pageHeight = 297;
+  const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "landscape" });
+  const marginX = 12;
+  const pageWidth = 297;
+  const pageHeight = 210;
   const usableWidth = pageWidth - marginX * 2;
-  let y = 18;
+  const bottomLimit = pageHeight - 12;
 
   const allItems = groups.flatMap((g) => g.items);
-  const minStart = Math.min(...allItems.map((i) => i.start.getTime()));
-  const maxEnd = Math.max(...allItems.map((i) => i.end.getTime()));
-  const span = Math.max(1, maxEnd - minStart + DAY_MS);
+  const earliestStart = new Date(Math.min(...allItems.map((i) => i.start.getTime())));
+  const latestEnd = new Date(Math.max(...allItems.map((i) => i.end.getTime())));
+  const rangeStart = new Date(earliestStart.getFullYear(), earliestStart.getMonth(), 1);
+  const rangeEndExclusive = new Date(latestEnd.getFullYear(), latestEnd.getMonth() + 1, 1);
+  const totalDays = Math.max(1, Math.round((rangeEndExclusive.getTime() - rangeStart.getTime()) / DAY_MS));
+  const mmPerDay = usableWidth / totalDays;
+  const showDayNumbers = mmPerDay >= 4;
+  const dayIndex = (d: Date) => Math.round((d.getTime() - rangeStart.getTime()) / DAY_MS);
+  const xForDay = (idx: number) => marginX + idx * mmPerDay;
+  const headerHeight = showDayNumbers ? 12 : 6;
 
-  const ensureSpace = (needed: number) => {
-    if (y + needed > pageHeight - 15) {
-      doc.addPage();
-      y = 18;
+  const drawTimelineHeader = (topY: number) => {
+    doc.setFont("helvetica", "normal");
+    if (showDayNumbers) {
+      for (let i = 0; i < totalDays; i++) {
+        const d = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), rangeStart.getDate() + i);
+        const dow = d.getDay();
+        if (dow === 0 || dow === 6) {
+          doc.setFillColor(238, 238, 238);
+          doc.rect(xForDay(i), topY + 5, mmPerDay, 6, "F");
+        }
+        doc.setFontSize(5);
+        doc.setTextColor(140, 140, 140);
+        doc.text(String(d.getDate()), xForDay(i) + mmPerDay / 2, topY + 9, { align: "center" });
+      }
     }
+    doc.setFontSize(7);
+    doc.setTextColor(70, 70, 70);
+    doc.setDrawColor(200, 200, 200);
+    for (let cursor = new Date(rangeStart); cursor < rangeEndExclusive; cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)) {
+      const x = xForDay(dayIndex(cursor));
+      doc.line(x, topY, x, topY + headerHeight);
+      doc.text(cursor.toLocaleDateString("de-DE", { month: "short", year: "2-digit" }), x + 1, topY + 3.5);
+    }
+    doc.line(marginX, topY + headerHeight, marginX + usableWidth, topY + headerHeight);
+    doc.line(marginX + usableWidth, topY, marginX + usableWidth, topY + headerHeight);
   };
 
+  let y = 16;
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
+  doc.setFontSize(15);
   doc.setTextColor(20, 20, 20);
   doc.text("Bau-Schlau – Projekt-Zeitplan", marginX, y);
-  y += 6;
+  y += 5.5;
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
+  doc.setFontSize(8.5);
   doc.setTextColor(120, 120, 120);
   doc.text(`Erstellt am ${new Date().toLocaleDateString("de-DE")}`, marginX, y);
-  y += 7;
+  y += 6;
 
-  doc.setFontSize(8);
+  doc.setFontSize(7.5);
   let legendX = marginX;
   for (const [status, label] of Object.entries(TASK_STATUS_LABEL)) {
     const [r, g, b] = hexToRgb(GANTT_BAR_COLOR_HEX[status as TaskStatus]);
     doc.setFillColor(r, g, b);
-    doc.rect(legendX, y - 2.8, 3, 3, "F");
+    doc.rect(legendX, y - 2.6, 3, 3, "F");
     doc.setTextColor(60, 60, 60);
     doc.text(label, legendX + 4.5, y);
     legendX += 4.5 + doc.getTextWidth(label) + 6;
   }
-  y += 8;
+  y += 5;
+
+  drawTimelineHeader(y);
+  y += headerHeight + 4;
+
+  const ensureSpace = (needed: number) => {
+    if (y + needed > bottomLimit) {
+      doc.addPage();
+      y = 12;
+      drawTimelineHeader(y);
+      y += headerHeight + 4;
+    }
+  };
 
   for (const group of groups) {
-    ensureSpace(10);
+    ensureSpace(9);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
+    doc.setFontSize(10.5);
     doc.setTextColor(20, 20, 20);
     doc.text(BEREICH_LABEL[group.bereich], marginX, y);
-    doc.setDrawColor(220, 220, 220);
-    doc.line(marginX, y + 1.5, marginX + usableWidth, y + 1.5);
-    y += 7;
+    y += 5.5;
 
     for (const item of group.items) {
-      ensureSpace(13);
+      ensureSpace(11);
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
+      doc.setFontSize(8.5);
       doc.setTextColor(30, 30, 30);
-      doc.text(item.task.title, marginX, y, { maxWidth: usableWidth * 0.65 });
-      doc.setFontSize(7.5);
+      doc.text(item.task.title, marginX, y, { maxWidth: usableWidth * 0.6 });
+      doc.setFontSize(7);
       doc.setTextColor(130, 130, 130);
       doc.text(`${formatDate(item.task.startDatum)} - ${formatDate(item.task.deadline)}`, marginX + usableWidth, y, {
         align: "right",
       });
-      y += 3;
+      y += 2.8;
 
+      const barX = xForDay(dayIndex(item.start));
+      const barW = Math.max(1.5, (dayIndex(item.end) - dayIndex(item.start) + 1) * mmPerDay);
       doc.setFillColor(235, 235, 235);
       doc.roundedRect(marginX, y, usableWidth, 4, 1, 1, "F");
-      const leftPct = (item.start.getTime() - minStart) / span;
-      const widthPct = Math.max(0.01, (item.end.getTime() - item.start.getTime() + DAY_MS) / span);
       const [r, g, b] = hexToRgb(GANTT_BAR_COLOR_HEX[item.task.status]);
       doc.setFillColor(r, g, b);
-      doc.roundedRect(marginX + leftPct * usableWidth, y, Math.max(2, widthPct * usableWidth), 4, 1, 1, "F");
-      y += 8;
+      doc.roundedRect(barX, y, barW, 4, 1, 1, "F");
+      y += 7.5;
     }
-    y += 3;
+    y += 2.5;
   }
 
   doc.save(`bau-schlau-zeitplan-${toISODate(new Date())}.pdf`);
