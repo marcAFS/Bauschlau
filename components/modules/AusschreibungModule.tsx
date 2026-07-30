@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { FileText, Printer, Upload, Trash2, AlertTriangle, ListChecks } from "lucide-react";
 import { useBauSchlauStore } from "@/lib/store";
-import { analyzeAngebotText } from "@/lib/ai-simulator";
+import { api } from "@/lib/api-client";
 import { BEREICH_LABEL } from "@/lib/types";
 import { formatCurrency } from "@/lib/ui-helpers";
 
@@ -85,9 +85,11 @@ function AngebotUpload() {
     reader.readAsDataURL(f);
   };
 
-  const submit = () => {
+  const submit = async () => {
     if (!handwerkerName.trim()) return;
-    const analyse = freitext.trim() ? analyzeAngebotText(freitext) : { hinweise: [], versteckteKosten: [] };
+    const analyse = freitext.trim()
+      ? await api.ai.angebot<{ hinweise: string[]; versteckteKosten: string[] }>(freitext)
+      : { hinweise: [], versteckteKosten: [] };
     addAngebot({
       handwerkerName: handwerkerName.trim(),
       dateiName: file?.name,

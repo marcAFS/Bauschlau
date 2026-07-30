@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { Mic, Sparkles, ClipboardCheck, ScrollText, CalendarClock, CheckCircle2 } from "lucide-react";
 import { useBauSchlauStore } from "@/lib/store";
-import { extractFromProtokoll } from "@/lib/ai-simulator";
+import { api } from "@/lib/api-client";
 import { BEREICH_LABEL } from "@/lib/types";
-import type { Protokoll } from "@/lib/types";
+import type { Protokoll, ProtokollExtraktion } from "@/lib/types";
 
 const QUELLEN: Protokoll["quelle"][] = ["Schornsteinfeger", "Energieberater", "Handwerker", "Sonstiges"];
 
@@ -102,15 +102,16 @@ export default function ProtokollModule() {
   const [quelle, setQuelle] = useState<Protokoll["quelle"]>("Handwerker");
   const [loading, setLoading] = useState(false);
 
-  const verarbeiten = () => {
+  const verarbeiten = async () => {
     if (!text.trim()) return;
     setLoading(true);
-    setTimeout(() => {
-      const extraktion = extractFromProtokoll(text.trim());
+    try {
+      const extraktion = await api.ai.protokoll<ProtokollExtraktion>(text.trim());
       addProtokoll({ text: text.trim(), quelle, extraktion, uebernommen: false });
       setText("");
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   };
 
   return (

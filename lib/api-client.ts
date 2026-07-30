@@ -63,4 +63,11 @@ export const api = {
   import: {
     legacyLocalStorage: (payload: unknown) => post("/api/import", payload),
   },
+  ai: {
+    wunsch: <T>(text: string) => post<T>("/api/ai/wunsch", { text }),
+    protokoll: <T>(text: string) => post<T>("/api/ai/protokoll", { text }),
+    angebot: <T>(text: string) => post<T>("/api/ai/angebot", { text }),
+    mangel: (history: { role: string; text: string }[]) =>
+      post<{ text: string }>("/api/ai/mangel", { history }),
+  },
 };

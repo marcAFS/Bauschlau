@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { Sparkles, Send, AlertTriangle, HelpCircle, Hammer, CheckCircle2, Trash2 } from "lucide-react";
 import { useBauSchlauStore } from "@/lib/store";
-import { analyzeWunsch } from "@/lib/ai-simulator";
+import { api } from "@/lib/api-client";
 import { BEREICH_LABEL } from "@/lib/types";
-import type { Wunsch } from "@/lib/types";
+import type { Wunsch, WunschAnalyse } from "@/lib/types";
 
 function WunschCard({ wunsch }: { wunsch: Wunsch }) {
   const updateWunsch = useBauSchlauStore((s) => s.updateWunsch);
@@ -13,13 +13,14 @@ function WunschCard({ wunsch }: { wunsch: Wunsch }) {
   const addTask = useBauSchlauStore((s) => s.addTask);
   const [loading, setLoading] = useState(false);
 
-  const runCheck = () => {
+  const runCheck = async () => {
     setLoading(true);
-    setTimeout(() => {
-      const analyse = analyzeWunsch(wunsch.text);
+    try {
+      const analyse = await api.ai.wunsch<WunschAnalyse>(wunsch.text);
       updateWunsch(wunsch.id, { analyse });
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   };
 
   const uebernehmen = () => {

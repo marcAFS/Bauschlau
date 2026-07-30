@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Scale, Send, Info } from "lucide-react";
 import { useBauSchlauStore } from "@/lib/store";
-import { mangelAssistentAntwort } from "@/lib/ai-simulator";
+import { api } from "@/lib/api-client";
 
 const BEISPIELE = [
   "Der Fliesenleger hat den Estrich schon nach 5 Tagen gefliest, jetzt liegen Fliesen hohl.",
@@ -22,15 +22,18 @@ export default function MaengelModule() {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [mangelChat]);
 
-  const send = (text: string) => {
+  const send = async (text: string) => {
     if (!text.trim() || loading) return;
+    const history = [...mangelChat, { role: "user" as const, text: text.trim() }];
     addMangelChatMessage({ role: "user", text: text.trim() });
     setInput("");
     setLoading(true);
-    setTimeout(() => {
-      addMangelChatMessage({ role: "assistant", text: mangelAssistentAntwort(text) });
+    try {
+      const { text: antwort } = await api.ai.mangel(history);
+      addMangelChatMessage({ role: "assistant", text: antwort });
+    } finally {
       setLoading(false);
-    }, 600);
+    }
   };
 
   return (
