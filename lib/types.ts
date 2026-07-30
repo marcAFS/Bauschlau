@@ -105,6 +105,7 @@ export interface Task {
   prioritaet: Prioritaet;
   startDatum?: string; // ISO-Datum (YYYY-MM-DD)
   deadline?: string; // ISO-Datum (YYYY-MM-DD)
+  abhaengigVon?: string[]; // IDs von Aufgaben, die vorher abgeschlossen sein müssen
   materialStatus?: MaterialStatus;
   lieferzeitTage?: number;
   sperrfristBisTag?: number; // Trocknungszeit etc. in Tagen ab Abschluss

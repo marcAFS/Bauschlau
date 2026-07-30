@@ -1,11 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarClock, Hourglass, Package, CheckCircle2, TriangleAlert, GanttChartSquare } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  CalendarClock,
+  Hourglass,
+  Package,
+  CheckCircle2,
+  TriangleAlert,
+  GanttChartSquare,
+  ChevronDown,
+  Printer,
+} from "lucide-react";
 import { useBauSchlauStore } from "@/lib/store";
 import { empfehleFolgeaufgabe } from "@/lib/ai-simulator";
 import { MATERIAL_STATUS_LABEL, MATERIAL_STATUS_STYLES, formatDate } from "@/lib/ui-helpers";
-import { BEREICH_LABEL, TASK_STATUS_LABEL, type Task, type TaskStatus } from "@/lib/types";
+import { BEREICH_LABEL, TASK_STATUS_LABEL, type Bereich, type Task, type TaskStatus } from "@/lib/types";
 import TaskModal from "@/components/TaskModal";
 
 function tageSeit(iso: string): number {
@@ -20,6 +29,16 @@ const GANTT_BAR_COLOR: Record<TaskStatus, string> = {
   erledigt: "bg-emerald-500",
 };
 
+const GANTT_BAR_COLOR_HEX: Record<TaskStatus, string> = {
+  offen: "#0ea5e9",
+  in_arbeit: "#f59e0b",
+  wartend: "#3b82f6",
+  blockiert: "#ef4444",
+  erledigt: "#10b981",
+};
+
+const BEREICH_ORDER: Bereich[] = ["keller", "eg", "og", "dach", "garage", "garten", "fassade"];
+
 const DAY_MS = 86400000;
 const LABEL_COL_WIDTH = 240;
 
@@ -31,9 +50,27 @@ const ZOOM_LEVELS = [
   { key: "jahr", label: "Jahr", pxPerDay: 3 },
 ] as const;
 type ZoomKey = (typeof ZOOM_LEVELS)[number]["key"];
+const ZOOM_MONTHS: Record<ZoomKey, number> = {
+  monat: 1,
+  "2monate": 2,
+  "3monate": 3,
+  halbjahr: 6,
+  jahr: 12,
+};
 
 function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function addDays(d: Date, n: number): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+}
+
+function toISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 // Dezente Wochenend-Schattierung als sich wiederholender Hintergrund (Sa+So),
@@ -52,12 +89,74 @@ function weekendBackground(rangeStartDow: number, pxPerDay: number): string {
   return `repeating-linear-gradient(to right, ${stops.join(", ")})`;
 }
 
+interface GanttItem {
+  task: Task;
+  start: Date;
+  end: Date;
+}
+
+function buildPrintHtml(groups: { bereich: Bereich; items: GanttItem[] }[]): string {
+  const allItems = groups.flatMap((g) => g.items);
+  const minStart = Math.min(...allItems.map((i) => i.start.getTime()));
+  const maxEnd = Math.max(...allItems.map((i) => i.end.getTime()));
+  const span = Math.max(1, maxEnd - minStart + DAY_MS);
+
+  const rows = groups
+    .map((g) => {
+      const groupRows = g.items
+        .map((i) => {
+          const leftPct = ((i.start.getTime() - minStart) / span) * 100;
+          const widthPct = Math.max(0.8, ((i.end.getTime() - i.start.getTime() + DAY_MS) / span) * 100);
+          return `<div style="margin-bottom:10px;">
+            <div style="font-size:12px;color:#111;margin-bottom:2px;">${i.task.title} <span style="color:#666;">(${formatDate(
+              i.task.startDatum
+            )} – ${formatDate(i.task.deadline)})</span></div>
+            <div style="position:relative;height:16px;background:#eee;border-radius:4px;">
+              <div style="position:absolute;left:${leftPct}%;width:${widthPct}%;height:16px;border-radius:4px;background:${
+                GANTT_BAR_COLOR_HEX[i.task.status]
+              };"></div>
+            </div>
+          </div>`;
+        })
+        .join("");
+      return `<div style="margin-bottom:18px;">
+        <div style="font-size:13px;font-weight:700;color:#111;margin-bottom:6px;border-bottom:1px solid #ddd;padding-bottom:2px;">${BEREICH_LABEL[g.bereich]}</div>
+        ${groupRows}
+      </div>`;
+    })
+    .join("");
+
+  const legend = Object.entries(TASK_STATUS_LABEL)
+    .map(
+      ([status, label]) =>
+        `<span style="display:inline-flex;align-items:center;gap:4px;margin-right:14px;font-size:11px;color:#333;"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${
+          GANTT_BAR_COLOR_HEX[status as TaskStatus]
+        };"></span>${label}</span>`
+    )
+    .join("");
+
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Bau-Schlau – Projekt-Zeitplan</title></head>
+    <body style="font-family: -apple-system, Helvetica, Arial, sans-serif; padding: 32px; background:#fff;">
+      <h1 style="font-size:18px;margin:0 0 2px 0;color:#111;">Bau-Schlau – Projekt-Zeitplan</h1>
+      <p style="font-size:11px;color:#666;margin:0 0 16px 0;">Erstellt am ${new Date().toLocaleDateString("de-DE")}</p>
+      <div style="margin-bottom:16px;">${legend}</div>
+      ${rows}
+    </body></html>`;
+}
+
 function GanttChart({ tasks }: { tasks: Task[] }) {
+  const updateTask = useBauSchlauStore((s) => s.updateTask);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [zoom, setZoom] = useState<ZoomKey>("monat");
+  const [collapsed, setCollapsed] = useState<Set<Bereich>>(new Set());
+  const [rowCenters, setRowCenters] = useState<Record<string, number>>({});
+  const [drag, setDrag] = useState<{ taskId: string; deltaPx: number } | null>(null);
+
   const pxPerDay = ZOOM_LEVELS.find((z) => z.key === zoom)!.pxPerDay;
   const showDayNumbers = pxPerDay >= 12;
   const scrollRef = useRef<HTMLDivElement>(null);
+  const rowsWrapperRef = useRef<HTMLDivElement>(null);
+  const rowElRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   const items = useMemo(() => {
     return tasks
@@ -67,22 +166,62 @@ function GanttChart({ tasks }: { tasks: Task[] }) {
       .sort((a, b) => a.start.getTime() - b.start.getTime());
   }, [tasks]);
 
-  const rangeStart = useMemo(() => {
+  const groups = useMemo(() => {
+    const byBereich = new Map<Bereich, GanttItem[]>();
+    for (const item of items) {
+      const arr = byBereich.get(item.task.bereich) ?? [];
+      arr.push(item);
+      byBereich.set(item.task.bereich, arr);
+    }
+    return BEREICH_ORDER.filter((b) => byBereich.has(b)).map((bereich) => ({ bereich, items: byBereich.get(bereich)! }));
+  }, [items]);
+
+  const visibleIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const g of groups) {
+      if (collapsed.has(g.bereich)) continue;
+      for (const i of g.items) ids.add(i.task.id);
+    }
+    return ids;
+  }, [groups, collapsed]);
+
+  // Range deckt immer mindestens die Nominal-Monatsspanne der Zoom-Stufe ab
+  // (z.B. "Jahr" = 12 Monate), ausgehend vom frühesten von Aufgaben-Start und
+  // heutigem Monat – und wird nie kleiner als der tatsächliche Datenbereich.
+  const range = useMemo(() => {
     if (items.length === 0) return null;
     const earliestStart = new Date(Math.min(...items.map((i) => i.start.getTime())));
-    return new Date(earliestStart.getFullYear(), earliestStart.getMonth(), 1);
-  }, [items]);
-  const rangeEndExclusive = useMemo(() => {
-    if (items.length === 0) return null;
     const latestEnd = new Date(Math.max(...items.map((i) => i.end.getTime())));
-    return new Date(latestEnd.getFullYear(), latestEnd.getMonth() + 1, 1);
-  }, [items]);
+    const dataStart = new Date(earliestStart.getFullYear(), earliestStart.getMonth(), 1);
+    const dataEndExclusive = new Date(latestEnd.getFullYear(), latestEnd.getMonth() + 1, 1);
+    const today = new Date();
+    const todayMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
+    const start = dataStart.getTime() < todayMonth.getTime() ? dataStart : todayMonth;
+    const minEndExclusive = new Date(start.getFullYear(), start.getMonth() + ZOOM_MONTHS[zoom], 1);
+    const endExclusive = dataEndExclusive.getTime() > minEndExclusive.getTime() ? dataEndExclusive : minEndExclusive;
+    return { start, endExclusive };
+  }, [items, zoom]);
+  const rangeStart = range?.start ?? null;
+  const rangeEndExclusive = range?.endExclusive ?? null;
 
   const totalDays =
     rangeStart && rangeEndExclusive ? Math.max(1, Math.round((rangeEndExclusive.getTime() - rangeStart.getTime()) / DAY_MS)) : 0;
   const chartWidth = totalDays * pxPerDay;
   const dayOffset = (d: Date) => (rangeStart ? Math.round((d.getTime() - rangeStart.getTime()) / DAY_MS) : 0);
   const todayOffset = dayOffset(startOfDay(new Date())) * pxPerDay;
+
+  // Pixel-Rechtecke aller Balken (unabhängig von Sichtbarkeit) für Pfeile & Drag.
+  const barRects = useMemo(() => {
+    const map = new Map<string, { left: number; width: number }>();
+    for (const { task, start, end } of items) {
+      const left = dayOffset(start) * pxPerDay;
+      const width = Math.max(pxPerDay, (dayOffset(end) - dayOffset(start) + 1) * pxPerDay);
+      map.set(task.id, { left, width });
+    }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, pxPerDay, rangeStart]);
 
   const jumpToToday = () => {
     const el = scrollRef.current;
@@ -100,6 +239,59 @@ function GanttChart({ tasks }: { tasks: Task[] }) {
     el.scrollLeft = Math.max(0, todayOffset - visibleChartWidth / 2);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zoom, items.length]);
+
+  // Zeilen-Mittelpunkte (Y) für die Abhängigkeits-Pfeile messen – nötig, weil
+  // die Zeilenhöhe durch umbrechende Titel variiert und nicht vorab bekannt ist.
+  useLayoutEffect(() => {
+    const centers: Record<string, number> = {};
+    rowElRefs.current.forEach((el, id) => {
+      centers[id] = el.offsetTop + el.offsetHeight / 2;
+    });
+    setRowCenters(centers);
+  }, [groups, collapsed, zoom]);
+
+  const toggleGroup = (bereich: Bereich) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(bereich)) next.delete(bereich);
+      else next.add(bereich);
+      return next;
+    });
+
+  const startDrag = (e: React.PointerEvent<HTMLDivElement>, taskId: string) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const startX = e.clientX;
+    setDrag({ taskId, deltaPx: 0 });
+    (e.currentTarget as HTMLDivElement & { _dragStartX?: number })._dragStartX = startX;
+  };
+
+  const onDragMove = (e: React.PointerEvent<HTMLDivElement>, taskId: string) => {
+    if (!drag || drag.taskId !== taskId) return;
+    const startX = (e.currentTarget as HTMLDivElement & { _dragStartX?: number })._dragStartX ?? e.clientX;
+    const rawDelta = e.clientX - startX;
+    const snapped = Math.round(rawDelta / pxPerDay) * pxPerDay;
+    setDrag({ taskId, deltaPx: snapped });
+  };
+
+  const endDrag = (task: Task, start: Date, end: Date) => {
+    if (!drag || drag.taskId !== task.id) return;
+    const deltaDays = Math.round(drag.deltaPx / pxPerDay);
+    setDrag(null);
+    if (deltaDays === 0) return;
+    updateTask(task.id, {
+      startDatum: toISODate(addDays(start, deltaDays)),
+      deadline: toISODate(addDays(end, deltaDays)),
+    });
+  };
+
+  const exportPdf = () => {
+    const w = window.open("", "_blank");
+    if (!w) return;
+    w.document.write(buildPrintHtml(groups));
+    w.document.close();
+    w.focus();
+    w.print();
+  };
 
   if (items.length === 0 || !rangeStart || !rangeEndExclusive) {
     return (
@@ -133,6 +325,25 @@ function GanttChart({ tasks }: { tasks: Task[] }) {
   const showToday = todayOffset >= 0 && todayOffset <= chartWidth;
   const dayRowHeight = showDayNumbers ? 20 : 0;
 
+  const arrows = items
+    .filter((i) => visibleIds.has(i.task.id) && i.task.abhaengigVon && i.task.abhaengigVon.length > 0)
+    .flatMap((i) =>
+      (i.task.abhaengigVon ?? [])
+        .filter((depId) => visibleIds.has(depId) && barRects.has(depId))
+        .map((depId) => {
+          const from = barRects.get(depId)!;
+          const to = barRects.get(i.task.id)!;
+          const y1 = rowCenters[depId];
+          const y2 = rowCenters[i.task.id];
+          if (y1 === undefined || y2 === undefined) return null;
+          const x1 = LABEL_COL_WIDTH + from.left + from.width;
+          const x2 = LABEL_COL_WIDTH + to.left;
+          const midX = x1 + Math.max(10, (x2 - x1) / 2);
+          return { key: `${depId}->${i.task.id}`, x1, y1, x2, y2, midX };
+        })
+        .filter((a): a is NonNullable<typeof a> => a !== null)
+    );
+
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -163,6 +374,12 @@ function GanttChart({ tasks }: { tasks: Task[] }) {
             className="rounded-lg border border-zinc-800 px-2.5 py-1 text-xs font-medium text-zinc-400 hover:text-zinc-200"
           >
             Heute
+          </button>
+          <button
+            onClick={exportPdf}
+            className="flex items-center gap-1.5 rounded-lg border border-zinc-800 px-2.5 py-1 text-xs font-medium text-zinc-400 hover:text-zinc-200"
+          >
+            <Printer className="h-3.5 w-3.5" /> PDF
           </button>
         </div>
       </div>
@@ -204,7 +421,7 @@ function GanttChart({ tasks }: { tasks: Task[] }) {
             </div>
           </div>
 
-          <div className="relative">
+          <div ref={rowsWrapperRef} className="relative">
             {showToday && (
               <div
                 className="pointer-events-none absolute top-0 bottom-0 z-10 w-px bg-orange-500/70"
@@ -212,28 +429,84 @@ function GanttChart({ tasks }: { tasks: Task[] }) {
                 title="Heute"
               />
             )}
-            {items.map(({ task, start, end }) => {
-              const left = dayOffset(start) * pxPerDay;
-              const width = Math.max(pxPerDay, (dayOffset(end) - dayOffset(start) + 1) * pxPerDay);
+
+            {arrows.length > 0 && (
+              <svg
+                className="pointer-events-none absolute top-0 left-0 z-10"
+                width={chartWidth + LABEL_COL_WIDTH}
+                height="100%"
+                style={{ overflow: "visible" }}
+              >
+                <defs>
+                  <marker id="gantt-arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                    <path d="M0,0 L6,3 L0,6 Z" fill="#f97316" />
+                  </marker>
+                </defs>
+                {arrows.map((a) => (
+                  <polyline
+                    key={a.key}
+                    points={`${a.x1},${a.y1} ${a.midX},${a.y1} ${a.midX},${a.y2} ${a.x2 - 6},${a.y2}`}
+                    fill="none"
+                    stroke="#f97316"
+                    strokeWidth={1.5}
+                    strokeDasharray="3,2"
+                    markerEnd="url(#gantt-arrow)"
+                  />
+                ))}
+              </svg>
+            )}
+
+            {groups.map((g) => {
+              const isCollapsed = collapsed.has(g.bereich);
               return (
-                <div key={task.id} className="flex border-b border-zinc-800/60 last:border-0">
+                <div key={g.bereich}>
                   <button
-                    onClick={() => setEditingTask(task)}
-                    className="sticky left-0 z-20 flex shrink-0 items-center border-r border-zinc-800 bg-zinc-900/95 px-3 py-2 text-left text-sm text-zinc-300 hover:bg-zinc-800/80 hover:text-orange-400"
-                    style={{ width: LABEL_COL_WIDTH }}
-                    title={task.title}
+                    onClick={() => toggleGroup(g.bereich)}
+                    className="flex w-full items-center gap-2 border-b border-zinc-800 bg-zinc-900/70 px-3 py-1.5 text-left text-xs font-semibold text-zinc-300 hover:bg-zinc-800/70"
+                    style={{ minWidth: chartWidth + LABEL_COL_WIDTH }}
                   >
-                    <span className="leading-snug">{task.title}</span>
+                    <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
+                    {BEREICH_LABEL[g.bereich]}
+                    <span className="font-normal text-zinc-500">({g.items.length})</span>
                   </button>
-                  <div className="relative" style={{ width: chartWidth, backgroundImage: weekendBg }}>
-                    <div
-                      className={`absolute top-1/2 flex h-6 -translate-y-1/2 items-center overflow-hidden rounded-md px-2 text-[11px] font-medium whitespace-nowrap text-zinc-950 ${GANTT_BAR_COLOR[task.status]}`}
-                      style={{ left, width }}
-                      title={`${task.title}: ${formatDate(task.startDatum!)} – ${formatDate(task.deadline!)}`}
-                    >
-                      {pxPerDay >= 10 && BEREICH_LABEL[task.bereich]}
-                    </div>
-                  </div>
+
+                  {!isCollapsed &&
+                    g.items.map(({ task, start, end }) => {
+                      const rect = barRects.get(task.id)!;
+                      const isDragging = drag?.taskId === task.id;
+                      const left = isDragging ? rect.left + drag.deltaPx : rect.left;
+                      return (
+                        <div
+                          key={task.id}
+                          ref={(el) => {
+                            if (el) rowElRefs.current.set(task.id, el);
+                            else rowElRefs.current.delete(task.id);
+                          }}
+                          className="flex border-b border-zinc-800/60 last:border-0"
+                        >
+                          <button
+                            onClick={() => setEditingTask(task)}
+                            className="sticky left-0 z-20 flex shrink-0 items-center border-r border-zinc-800 bg-zinc-900/95 px-3 py-2 text-left text-sm text-zinc-300 hover:bg-zinc-800/80 hover:text-orange-400"
+                            style={{ width: LABEL_COL_WIDTH }}
+                            title={task.title}
+                          >
+                            <span className="leading-snug">{task.title}</span>
+                          </button>
+                          <div className="relative" style={{ width: chartWidth, backgroundImage: weekendBg }}>
+                            <div
+                              onPointerDown={(e) => startDrag(e, task.id)}
+                              onPointerMove={(e) => onDragMove(e, task.id)}
+                              onPointerUp={() => endDrag(task, start, end)}
+                              className={`absolute top-1/2 flex h-6 -translate-y-1/2 cursor-grab items-center overflow-hidden rounded-md px-2 text-[11px] font-medium whitespace-nowrap text-zinc-950 select-none active:cursor-grabbing ${GANTT_BAR_COLOR[task.status]}`}
+                              style={{ left, width: rect.width, touchAction: "none" }}
+                              title={`${task.title}: ${formatDate(task.startDatum!)} – ${formatDate(task.deadline!)} (ziehen zum Verschieben)`}
+                            >
+                              {pxPerDay >= 10 && BEREICH_LABEL[task.bereich]}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                 </div>
               );
             })}

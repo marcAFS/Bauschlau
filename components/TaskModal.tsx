@@ -31,6 +31,7 @@ const emptyForm = (prefill?: Partial<Task> | null) => ({
   prioritaet: (prefill?.prioritaet ?? "mittel") as Prioritaet,
   startDatum: prefill?.startDatum ? prefill.startDatum.slice(0, 10) : "",
   deadline: prefill?.deadline ? prefill.deadline.slice(0, 10) : "",
+  abhaengigVon: prefill?.abhaengigVon ?? ([] as string[]),
   materialStatus: prefill?.materialStatus ?? ("" as MaterialStatus | ""),
   lieferzeitTage: prefill?.lieferzeitTage?.toString() ?? "",
   sperrfristBisTag: prefill?.sperrfristBisTag?.toString() ?? "",
@@ -43,6 +44,8 @@ export default function TaskModal({ open, onClose, task, prefill, onSaved }: Pro
   const addTask = useBauSchlauStore((s) => s.addTask);
   const updateTask = useBauSchlauStore((s) => s.updateTask);
   const deleteTask = useBauSchlauStore((s) => s.deleteTask);
+  const alleTasks = useBauSchlauStore((s) => s.tasks);
+  const andereTasks = alleTasks.filter((t) => t.id !== task?.id);
 
   const [form, setForm] = useState(emptyForm(task ?? prefill));
 
@@ -54,6 +57,12 @@ export default function TaskModal({ open, onClose, task, prefill, onSaved }: Pro
 
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
+
+  const toggleAbhaengigkeit = (id: string) =>
+    setForm((f) => ({
+      ...f,
+      abhaengigVon: f.abhaengigVon.includes(id) ? f.abhaengigVon.filter((x) => x !== id) : [...f.abhaengigVon, id],
+    }));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,6 +89,7 @@ export default function TaskModal({ open, onClose, task, prefill, onSaved }: Pro
       prioritaet: form.prioritaet,
       startDatum: form.startDatum || undefined,
       deadline: form.deadline || undefined,
+      abhaengigVon: form.abhaengigVon.length > 0 ? form.abhaengigVon : undefined,
       materialStatus: form.materialStatus || undefined,
       lieferzeitTage: form.lieferzeitTage ? Number(form.lieferzeitTage) : undefined,
       sperrfristBisTag: form.sperrfristBisTag ? Number(form.sperrfristBisTag) : undefined,
@@ -223,6 +233,25 @@ export default function TaskModal({ open, onClose, task, prefill, onSaved }: Pro
                 />
               </div>
             </div>
+
+            {andereTasks.length > 0 && (
+              <div>
+                <label className={labelClass}>Abhängig von (muss vorher fertig sein)</label>
+                <div className="max-h-32 space-y-1 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 p-2">
+                  {andereTasks.map((t) => (
+                    <label key={t.id} className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-sm text-zinc-300 hover:bg-zinc-800">
+                      <input
+                        type="checkbox"
+                        checked={form.abhaengigVon.includes(t.id)}
+                        onChange={() => toggleAbhaengigkeit(t.id)}
+                        className="accent-orange-500"
+                      />
+                      <span className="truncate">{t.title}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div>

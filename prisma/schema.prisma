@@ -22,6 +22,7 @@ model Task {
   prioritaet        String
   startDatum        DateTime?
   deadline          DateTime?
+  abhaengigVon      String[]  @default([])
   materialStatus    String?
   lieferzeitTage    Int?
   sperrfristBisTag  Int?
