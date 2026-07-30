@@ -6,12 +6,17 @@ import { createSessionToken, SESSION_COOKIE_NAME, SESSION_MAX_AGE_SECONDS } from
 import { timingSafeEqualStr } from "@/lib/password";
 
 export async function loginAction(formData: FormData) {
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
   const nextParam = String(formData.get("next") ?? "/");
   const next = nextParam.startsWith("/") ? nextParam : "/";
-  const expected = process.env.APP_PASSWORD;
+  const expectedEmail = process.env.APP_EMAIL?.trim().toLowerCase();
+  const expectedPassword = process.env.APP_PASSWORD;
 
-  if (!expected || !timingSafeEqualStr(password, expected)) {
+  const emailOk = !!expectedEmail && timingSafeEqualStr(email, expectedEmail);
+  const passwordOk = !!expectedPassword && timingSafeEqualStr(password, expectedPassword);
+
+  if (!emailOk || !passwordOk) {
     redirect(`/login?error=1&next=${encodeURIComponent(next)}`);
   }
 

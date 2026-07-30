@@ -1,4 +1,4 @@
-import { HardHat, Lock } from "lucide-react";
+import { HardHat, Lock, Mail } from "lucide-react";
 import { loginAction } from "./actions";
 
 export default async function LoginPage({
@@ -26,17 +26,28 @@ export default async function LoginPage({
           <input type="hidden" name="next" value={next} />
           <div>
             <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-zinc-400">
-              <Lock className="h-3.5 w-3.5" /> Passwort
+              <Mail className="h-3.5 w-3.5" /> E-Mail
             </label>
             <input
-              type="password"
-              name="password"
+              type="email"
+              name="email"
               autoFocus
               required
               className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-zinc-100 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
             />
           </div>
-          {params.error && <p className="text-xs text-red-400">Falsches Passwort. Bitte erneut versuchen.</p>}
+          <div>
+            <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-zinc-400">
+              <Lock className="h-3.5 w-3.5" /> Passwort
+            </label>
+            <input
+              type="password"
+              name="password"
+              required
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-zinc-100 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+            />
+          </div>
+          {params.error && <p className="text-xs text-red-400">E-Mail oder Passwort falsch. Bitte erneut versuchen.</p>}
           <button
             type="submit"
             className="w-full rounded-lg bg-orange-500 py-2.5 text-sm font-semibold text-zinc-950 hover:bg-orange-400"
