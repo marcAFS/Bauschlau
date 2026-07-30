@@ -21,7 +21,8 @@ const GANTT_BAR_COLOR: Record<TaskStatus, string> = {
 
 const DAY_MS = 86400000;
 const PX_PER_DAY = 28;
-const LABEL_COL_WIDTH = 180;
+const LABEL_COL_WIDTH = 240;
+const ROW_HEIGHT = 56;
 
 function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -147,17 +148,17 @@ function GanttChart({ tasks }: { tasks: Task[] }) {
               const left = dayOffset(start) * PX_PER_DAY;
               const width = Math.max(PX_PER_DAY, (dayOffset(end) - dayOffset(start) + 1) * PX_PER_DAY);
               return (
-                <div key={task.id} className="flex border-b border-zinc-800/60 last:border-0" style={{ height: 44 }}>
+                <div key={task.id} className="flex border-b border-zinc-800/60 last:border-0" style={{ height: ROW_HEIGHT }}>
                   <div
-                    className="sticky left-0 z-20 flex shrink-0 items-center truncate border-r border-zinc-800 bg-zinc-900/95 px-3 text-sm text-zinc-300"
+                    className="sticky left-0 z-20 flex shrink-0 items-center border-r border-zinc-800 bg-zinc-900/95 px-3 py-1.5 text-sm text-zinc-300"
                     style={{ width: LABEL_COL_WIDTH }}
                     title={task.title}
                   >
-                    {task.title}
+                    <span className="line-clamp-2 leading-tight">{task.title}</span>
                   </div>
                   <div className="relative" style={{ width: chartWidth, backgroundImage: weekendBg }}>
                     <div
-                      className={`absolute top-2 flex h-6 items-center overflow-hidden rounded-md px-2 text-[11px] font-medium whitespace-nowrap text-zinc-950 ${GANTT_BAR_COLOR[task.status]}`}
+                      className={`absolute top-4 flex h-6 items-center overflow-hidden rounded-md px-2 text-[11px] font-medium whitespace-nowrap text-zinc-950 ${GANTT_BAR_COLOR[task.status]}`}
                       style={{ left, width }}
                       title={`${task.title}: ${formatDate(task.startDatum!)} – ${formatDate(task.deadline!)}`}
                     >
