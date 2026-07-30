@@ -9,7 +9,7 @@ import {
   TriangleAlert,
   GanttChartSquare,
   ChevronDown,
-  Printer,
+  Download,
 } from "lucide-react";
 import { useBauSchlauStore } from "@/lib/store";
 import { empfehleFolgeaufgabe } from "@/lib/ai-simulator";
@@ -95,53 +95,93 @@ interface GanttItem {
   end: Date;
 }
 
-function buildPrintHtml(groups: { bereich: Bereich; items: GanttItem[] }[]): string {
+function hexToRgb(hex: string): [number, number, number] {
+  const n = parseInt(hex.replace("#", ""), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+// Baut ein echtes PDF client-seitig (jsPDF) und löst direkt einen Download
+// aus – kein Druckdialog, kein Server-Rendering nötig.
+async function downloadGanttPdf(groups: { bereich: Bereich; items: GanttItem[] }[]) {
+  const { jsPDF } = await import("jspdf");
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const marginX = 15;
+  const pageWidth = 210;
+  const pageHeight = 297;
+  const usableWidth = pageWidth - marginX * 2;
+  let y = 18;
+
   const allItems = groups.flatMap((g) => g.items);
   const minStart = Math.min(...allItems.map((i) => i.start.getTime()));
   const maxEnd = Math.max(...allItems.map((i) => i.end.getTime()));
   const span = Math.max(1, maxEnd - minStart + DAY_MS);
 
-  const rows = groups
-    .map((g) => {
-      const groupRows = g.items
-        .map((i) => {
-          const leftPct = ((i.start.getTime() - minStart) / span) * 100;
-          const widthPct = Math.max(0.8, ((i.end.getTime() - i.start.getTime() + DAY_MS) / span) * 100);
-          return `<div style="margin-bottom:10px;">
-            <div style="font-size:12px;color:#111;margin-bottom:2px;">${i.task.title} <span style="color:#666;">(${formatDate(
-              i.task.startDatum
-            )} – ${formatDate(i.task.deadline)})</span></div>
-            <div style="position:relative;height:16px;background:#eee;border-radius:4px;">
-              <div style="position:absolute;left:${leftPct}%;width:${widthPct}%;height:16px;border-radius:4px;background:${
-                GANTT_BAR_COLOR_HEX[i.task.status]
-              };"></div>
-            </div>
-          </div>`;
-        })
-        .join("");
-      return `<div style="margin-bottom:18px;">
-        <div style="font-size:13px;font-weight:700;color:#111;margin-bottom:6px;border-bottom:1px solid #ddd;padding-bottom:2px;">${BEREICH_LABEL[g.bereich]}</div>
-        ${groupRows}
-      </div>`;
-    })
-    .join("");
+  const ensureSpace = (needed: number) => {
+    if (y + needed > pageHeight - 15) {
+      doc.addPage();
+      y = 18;
+    }
+  };
 
-  const legend = Object.entries(TASK_STATUS_LABEL)
-    .map(
-      ([status, label]) =>
-        `<span style="display:inline-flex;align-items:center;gap:4px;margin-right:14px;font-size:11px;color:#333;"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${
-          GANTT_BAR_COLOR_HEX[status as TaskStatus]
-        };"></span>${label}</span>`
-    )
-    .join("");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.setTextColor(20, 20, 20);
+  doc.text("Bau-Schlau – Projekt-Zeitplan", marginX, y);
+  y += 6;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(120, 120, 120);
+  doc.text(`Erstellt am ${new Date().toLocaleDateString("de-DE")}`, marginX, y);
+  y += 7;
 
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Bau-Schlau – Projekt-Zeitplan</title></head>
-    <body style="font-family: -apple-system, Helvetica, Arial, sans-serif; padding: 32px; background:#fff;">
-      <h1 style="font-size:18px;margin:0 0 2px 0;color:#111;">Bau-Schlau – Projekt-Zeitplan</h1>
-      <p style="font-size:11px;color:#666;margin:0 0 16px 0;">Erstellt am ${new Date().toLocaleDateString("de-DE")}</p>
-      <div style="margin-bottom:16px;">${legend}</div>
-      ${rows}
-    </body></html>`;
+  doc.setFontSize(8);
+  let legendX = marginX;
+  for (const [status, label] of Object.entries(TASK_STATUS_LABEL)) {
+    const [r, g, b] = hexToRgb(GANTT_BAR_COLOR_HEX[status as TaskStatus]);
+    doc.setFillColor(r, g, b);
+    doc.rect(legendX, y - 2.8, 3, 3, "F");
+    doc.setTextColor(60, 60, 60);
+    doc.text(label, legendX + 4.5, y);
+    legendX += 4.5 + doc.getTextWidth(label) + 6;
+  }
+  y += 8;
+
+  for (const group of groups) {
+    ensureSpace(10);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(20, 20, 20);
+    doc.text(BEREICH_LABEL[group.bereich], marginX, y);
+    doc.setDrawColor(220, 220, 220);
+    doc.line(marginX, y + 1.5, marginX + usableWidth, y + 1.5);
+    y += 7;
+
+    for (const item of group.items) {
+      ensureSpace(13);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(30, 30, 30);
+      doc.text(item.task.title, marginX, y, { maxWidth: usableWidth * 0.65 });
+      doc.setFontSize(7.5);
+      doc.setTextColor(130, 130, 130);
+      doc.text(`${formatDate(item.task.startDatum)} - ${formatDate(item.task.deadline)}`, marginX + usableWidth, y, {
+        align: "right",
+      });
+      y += 3;
+
+      doc.setFillColor(235, 235, 235);
+      doc.roundedRect(marginX, y, usableWidth, 4, 1, 1, "F");
+      const leftPct = (item.start.getTime() - minStart) / span;
+      const widthPct = Math.max(0.01, (item.end.getTime() - item.start.getTime() + DAY_MS) / span);
+      const [r, g, b] = hexToRgb(GANTT_BAR_COLOR_HEX[item.task.status]);
+      doc.setFillColor(r, g, b);
+      doc.roundedRect(marginX + leftPct * usableWidth, y, Math.max(2, widthPct * usableWidth), 4, 1, 1, "F");
+      y += 8;
+    }
+    y += 3;
+  }
+
+  doc.save(`bau-schlau-zeitplan-${toISODate(new Date())}.pdf`);
 }
 
 function GanttChart({ tasks }: { tasks: Task[] }) {
@@ -285,12 +325,7 @@ function GanttChart({ tasks }: { tasks: Task[] }) {
   };
 
   const exportPdf = () => {
-    const w = window.open("", "_blank");
-    if (!w) return;
-    w.document.write(buildPrintHtml(groups));
-    w.document.close();
-    w.focus();
-    w.print();
+    downloadGanttPdf(groups);
   };
 
   if (items.length === 0 || !rangeStart || !rangeEndExclusive) {
@@ -379,7 +414,7 @@ function GanttChart({ tasks }: { tasks: Task[] }) {
             onClick={exportPdf}
             className="flex items-center gap-1.5 rounded-lg border border-zinc-800 px-2.5 py-1 text-xs font-medium text-zinc-400 hover:text-zinc-200"
           >
-            <Printer className="h-3.5 w-3.5" /> PDF
+            <Download className="h-3.5 w-3.5" /> PDF
           </button>
         </div>
       </div>
@@ -460,15 +495,18 @@ function GanttChart({ tasks }: { tasks: Task[] }) {
               const isCollapsed = collapsed.has(g.bereich);
               return (
                 <div key={g.bereich}>
-                  <button
-                    onClick={() => toggleGroup(g.bereich)}
-                    className="flex w-full items-center gap-2 border-b border-zinc-800 bg-zinc-900/70 px-3 py-1.5 text-left text-xs font-semibold text-zinc-300 hover:bg-zinc-800/70"
-                    style={{ minWidth: chartWidth + LABEL_COL_WIDTH }}
-                  >
-                    <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
-                    {BEREICH_LABEL[g.bereich]}
-                    <span className="font-normal text-zinc-500">({g.items.length})</span>
-                  </button>
+                  <div className="flex border-b border-zinc-800 bg-zinc-900/70">
+                    <button
+                      onClick={() => toggleGroup(g.bereich)}
+                      className="sticky left-0 z-20 flex shrink-0 items-center gap-2 border-r border-zinc-800 bg-zinc-900/95 px-3 py-2 text-left text-xs font-semibold text-zinc-300 hover:bg-zinc-800/80"
+                      style={{ width: LABEL_COL_WIDTH }}
+                    >
+                      <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
+                      <span className="truncate">{BEREICH_LABEL[g.bereich]}</span>
+                      <span className="shrink-0 font-normal text-zinc-500">({g.items.length})</span>
+                    </button>
+                    <div style={{ width: chartWidth }} />
+                  </div>
 
                   {!isCollapsed &&
                     g.items.map(({ task, start, end }) => {
