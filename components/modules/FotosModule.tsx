@@ -85,10 +85,15 @@ interface SpeechRecognitionLike {
   stop: () => void;
 }
 
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function BautagebuchSection() {
   const bautagebuch = useBauSchlauStore((s) => s.bautagebuch);
   const addBautagebuchEintrag = useBauSchlauStore((s) => s.addBautagebuchEintrag);
   const [text, setText] = useState("");
+  const [datum, setDatum] = useState(todayStr());
   const [listening, setListening] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const [speechSupported] = useState(
@@ -122,13 +127,32 @@ function BautagebuchSection() {
 
   const speichern = () => {
     if (!text.trim()) return;
-    addBautagebuchEintrag({ datum: new Date().toISOString(), text: text.trim() });
+    const now = new Date();
+    const [y, m, d] = datum.split("-").map(Number);
+    const eintragsDatum = new Date(y, (m ?? 1) - 1, d ?? 1, now.getHours(), now.getMinutes(), now.getSeconds());
+    addBautagebuchEintrag({ datum: eintragsDatum.toISOString(), text: text.trim() });
     setText("");
+    setDatum(todayStr());
   };
+
+  const sortierterBautagebuch = useMemo(
+    () => [...bautagebuch].sort((a, b) => b.datum.localeCompare(a.datum)),
+    [bautagebuch]
+  );
 
   return (
     <div className="space-y-3">
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+        <div className="mb-3">
+          <label className="mb-1 block text-xs font-medium text-zinc-400">Datum des Eintrags</label>
+          <input
+            type="date"
+            className={`${inputClass} sm:max-w-[180px]`}
+            value={datum}
+            max={todayStr()}
+            onChange={(e) => setDatum(e.target.value)}
+          />
+        </div>
         <textarea
           className={inputClass}
           rows={3}
@@ -155,7 +179,7 @@ function BautagebuchSection() {
       </div>
 
       <div className="space-y-2">
-        {bautagebuch.map((e) => (
+        {sortierterBautagebuch.map((e) => (
           <div key={e.id} className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
             <p className="mb-1 text-xs text-zinc-500">{formatDateTime(e.datum)}</p>
             <p className="text-sm text-zinc-300">{e.text}</p>
