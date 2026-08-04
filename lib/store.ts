@@ -89,6 +89,8 @@ interface BauSchlauState {
   deleteAngebot: (id: string) => void;
 
   addBautagebuchEintrag: (e: Omit<BautagebuchEintrag, "id">) => BautagebuchEintrag;
+  updateBautagebuchEintrag: (id: string, patch: Partial<BautagebuchEintrag>) => void;
+  deleteBautagebuchEintrag: (id: string) => void;
 
   addMangelChatMessage: (m: Omit<MangelChatMessage, "id" | "createdAt">) => void;
 
@@ -266,6 +268,16 @@ export const useBauSchlauStore = create<BauSchlauState>()(
         set((s) => ({ bautagebuch: [entry, ...s.bautagebuch] }));
         api.bautagebuch.create(entry).catch(onSyncFail(set, "Eintrag konnte nicht gespeichert werden."));
         return entry;
+      },
+      updateBautagebuchEintrag: (id, patch) => {
+        set((s) => ({
+          bautagebuch: s.bautagebuch.map((e) => (e.id === id ? { ...e, ...patch } : e)),
+        }));
+        api.bautagebuch.update(id, patch).catch(onSyncFail(set, "Änderung konnte nicht gespeichert werden."));
+      },
+      deleteBautagebuchEintrag: (id) => {
+        set((s) => ({ bautagebuch: s.bautagebuch.filter((e) => e.id !== id) }));
+        api.bautagebuch.remove(id).catch(onSyncFail(set, "Löschen konnte nicht gespeichert werden."));
       },
 
       addMangelChatMessage: (m) => {

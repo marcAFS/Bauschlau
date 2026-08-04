@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Camera, Upload, Trash2, Mic, MicOff, FileDown, MessageCircle, Mail, BookOpen } from "lucide-react";
+import { Camera, Upload, Trash2, Mic, MicOff, FileDown, MessageCircle, Mail, BookOpen, Pencil } from "lucide-react";
 import { useBauSchlauStore } from "@/lib/store";
-import { BEREICH_LABEL, type Bereich } from "@/lib/types";
+import { BEREICH_LABEL, type Bereich, type BautagebuchEintrag } from "@/lib/types";
 import { formatDate, formatDateTime } from "@/lib/ui-helpers";
 
 const inputClass =
@@ -87,6 +87,73 @@ interface SpeechRecognitionLike {
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function BautagebuchEintragRow({ eintrag }: { eintrag: BautagebuchEintrag }) {
+  const updateBautagebuchEintrag = useBauSchlauStore((s) => s.updateBautagebuchEintrag);
+  const deleteBautagebuchEintrag = useBauSchlauStore((s) => s.deleteBautagebuchEintrag);
+  const [editing, setEditing] = useState(false);
+  const [datum, setDatum] = useState(eintrag.datum.slice(0, 10));
+  const [text, setText] = useState(eintrag.text);
+
+  const beginEdit = () => {
+    setDatum(eintrag.datum.slice(0, 10));
+    setText(eintrag.text);
+    setEditing(true);
+  };
+
+  const speichern = () => {
+    if (!text.trim()) return;
+    const alt = new Date(eintrag.datum);
+    const [y, m, d] = datum.split("-").map(Number);
+    const neuesDatum = new Date(y, (m ?? 1) - 1, d ?? 1, alt.getHours(), alt.getMinutes(), alt.getSeconds());
+    updateBautagebuchEintrag(eintrag.id, { datum: neuesDatum.toISOString(), text: text.trim() });
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <div className="rounded-lg border border-orange-500/50 bg-zinc-900/40 p-3">
+        <input
+          type="date"
+          className={`${inputClass} mb-2 sm:max-w-[180px]`}
+          value={datum}
+          max={todayStr()}
+          onChange={(e) => setDatum(e.target.value)}
+        />
+        <textarea className={inputClass} rows={3} value={text} onChange={(e) => setText(e.target.value)} />
+        <div className="mt-2 flex gap-2">
+          <button onClick={speichern} className="rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-zinc-950 hover:bg-orange-400">
+            Speichern
+          </button>
+          <button onClick={() => setEditing(false)} className="rounded-lg bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-700">
+            Abbrechen
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="group rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
+      <div className="flex items-start justify-between gap-2">
+        <p className="mb-1 text-xs text-zinc-500">{formatDateTime(eintrag.datum)}</p>
+        <div className="flex shrink-0 gap-1 opacity-0 transition group-hover:opacity-100">
+          <button onClick={beginEdit} className="rounded-md p-1 text-zinc-400 hover:bg-zinc-800 hover:text-orange-400" title="Bearbeiten">
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={() => deleteBautagebuchEintrag(eintrag.id)}
+            className="rounded-md p-1 text-zinc-400 hover:bg-zinc-800 hover:text-red-400"
+            title="Löschen"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+      <p className="whitespace-pre-wrap text-sm text-zinc-300">{eintrag.text}</p>
+    </div>
+  );
 }
 
 function BautagebuchSection() {
@@ -180,10 +247,7 @@ function BautagebuchSection() {
 
       <div className="space-y-2">
         {sortierterBautagebuch.map((e) => (
-          <div key={e.id} className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
-            <p className="mb-1 text-xs text-zinc-500">{formatDateTime(e.datum)}</p>
-            <p className="text-sm text-zinc-300">{e.text}</p>
-          </div>
+          <BautagebuchEintragRow key={e.id} eintrag={e} />
         ))}
       </div>
     </div>

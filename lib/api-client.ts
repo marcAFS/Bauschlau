@@ -57,6 +57,8 @@ export const api = {
   },
   bautagebuch: {
     create: (data: unknown) => post("/api/bautagebuch", data),
+    update: (id: string, data: unknown) => patch(`/api/bautagebuch/${id}`, data),
+    remove: (id: string) => del(`/api/bautagebuch/${id}`),
   },
   mangelChat: {
     create: (data: unknown) => post("/api/mangelchat", data),
