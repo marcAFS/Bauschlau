@@ -109,10 +109,11 @@ model Angebot {
 }
 
 model BautagebuchEintrag {
-  id      String   @id
-  datum   DateTime
-  text    String
-  taskIds String[] @default([])
+  id       String   @id
+  datum    DateTime
+  text     String
+  taskIds  String[] @default([])
+  fotoUrls String[] @default([])
 }
 
 model MangelChatMessage {

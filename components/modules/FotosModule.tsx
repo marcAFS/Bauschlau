@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Camera, Upload, Trash2, Mic, MicOff, FileDown, MessageCircle, Mail, BookOpen, Pencil } from "lucide-react";
+import { Camera, Upload, Trash2, Mic, MicOff, FileDown, MessageCircle, Mail, BookOpen, Pencil, ImagePlus, X } from "lucide-react";
 import { useBauSchlauStore } from "@/lib/store";
 import { BEREICH_LABEL, type Bereich, type BautagebuchEintrag } from "@/lib/types";
 import { formatDate, formatDateTime } from "@/lib/ui-helpers";
@@ -89,16 +89,70 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function readFilesAsDataUrls(files: FileList, onEach: (dataUrl: string) => void) {
+  Array.from(files).forEach((file) => {
+    const reader = new FileReader();
+    reader.onload = () => onEach(reader.result as string);
+    reader.readAsDataURL(file);
+  });
+}
+
+function FotoAnhangEditor({ fotos, onChange }: { fotos: string[]; onChange: (fotos: string[]) => void }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="mt-2 space-y-2">
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        multiple
+        capture="environment"
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files) readFilesAsDataUrls(e.target.files, (url) => onChange([...fotos, url]));
+          e.target.value = "";
+        }}
+      />
+      <button
+        onClick={() => fileRef.current?.click()}
+        className="flex items-center gap-1.5 rounded-lg border border-dashed border-zinc-700 px-3 py-1.5 text-xs text-zinc-400 hover:border-orange-500 hover:text-orange-400"
+      >
+        <ImagePlus className="h-3.5 w-3.5" /> Foto(s) hinzufügen
+      </button>
+      {fotos.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {fotos.map((url, i) => (
+            <div key={i} className="group/foto relative">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={url} alt="" className="h-16 w-16 rounded-md border border-zinc-700 object-cover" />
+              <button
+                onClick={() => onChange(fotos.filter((_, idx) => idx !== i))}
+                className="absolute -right-1.5 -top-1.5 rounded-full bg-black/80 p-0.5 text-white opacity-0 transition group-hover/foto:opacity-100"
+                title="Entfernen"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BautagebuchEintragRow({ eintrag }: { eintrag: BautagebuchEintrag }) {
   const updateBautagebuchEintrag = useBauSchlauStore((s) => s.updateBautagebuchEintrag);
   const deleteBautagebuchEintrag = useBauSchlauStore((s) => s.deleteBautagebuchEintrag);
   const [editing, setEditing] = useState(false);
   const [datum, setDatum] = useState(eintrag.datum.slice(0, 10));
   const [text, setText] = useState(eintrag.text);
+  const [fotos, setFotos] = useState<string[]>(eintrag.fotoUrls ?? []);
 
   const beginEdit = () => {
     setDatum(eintrag.datum.slice(0, 10));
     setText(eintrag.text);
+    setFotos(eintrag.fotoUrls ?? []);
     setEditing(true);
   };
 
@@ -107,7 +161,7 @@ function BautagebuchEintragRow({ eintrag }: { eintrag: BautagebuchEintrag }) {
     const alt = new Date(eintrag.datum);
     const [y, m, d] = datum.split("-").map(Number);
     const neuesDatum = new Date(y, (m ?? 1) - 1, d ?? 1, alt.getHours(), alt.getMinutes(), alt.getSeconds());
-    updateBautagebuchEintrag(eintrag.id, { datum: neuesDatum.toISOString(), text: text.trim() });
+    updateBautagebuchEintrag(eintrag.id, { datum: neuesDatum.toISOString(), text: text.trim(), fotoUrls: fotos });
     setEditing(false);
   };
 
@@ -122,6 +176,7 @@ function BautagebuchEintragRow({ eintrag }: { eintrag: BautagebuchEintrag }) {
           onChange={(e) => setDatum(e.target.value)}
         />
         <textarea className={inputClass} rows={3} value={text} onChange={(e) => setText(e.target.value)} />
+        <FotoAnhangEditor fotos={fotos} onChange={setFotos} />
         <div className="mt-2 flex gap-2">
           <button onClick={speichern} className="rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-zinc-950 hover:bg-orange-400">
             Speichern
@@ -152,6 +207,20 @@ function BautagebuchEintragRow({ eintrag }: { eintrag: BautagebuchEintrag }) {
         </div>
       </div>
       <p className="whitespace-pre-wrap text-sm text-zinc-300">{eintrag.text}</p>
+      {!!eintrag.fotoUrls?.length && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {eintrag.fotoUrls.map((url, i) => (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={i}
+              src={url}
+              alt=""
+              className="h-16 w-16 cursor-pointer rounded-md border border-zinc-700 object-cover"
+              onClick={() => window.open(url, "_blank")}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -161,6 +230,7 @@ function BautagebuchSection() {
   const addBautagebuchEintrag = useBauSchlauStore((s) => s.addBautagebuchEintrag);
   const [text, setText] = useState("");
   const [datum, setDatum] = useState(todayStr());
+  const [fotos, setFotos] = useState<string[]>([]);
   const [listening, setListening] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const [speechSupported] = useState(
@@ -197,9 +267,10 @@ function BautagebuchSection() {
     const now = new Date();
     const [y, m, d] = datum.split("-").map(Number);
     const eintragsDatum = new Date(y, (m ?? 1) - 1, d ?? 1, now.getHours(), now.getMinutes(), now.getSeconds());
-    addBautagebuchEintrag({ datum: eintragsDatum.toISOString(), text: text.trim() });
+    addBautagebuchEintrag({ datum: eintragsDatum.toISOString(), text: text.trim(), fotoUrls: fotos });
     setText("");
     setDatum(todayStr());
+    setFotos([]);
   };
 
   const sortierterBautagebuch = useMemo(
@@ -227,6 +298,7 @@ function BautagebuchSection() {
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
+        <FotoAnhangEditor fotos={fotos} onChange={setFotos} />
         <div className="mt-3 flex flex-wrap gap-2">
           <button
             onClick={toggleListening}

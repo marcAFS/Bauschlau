@@ -168,6 +168,7 @@ export interface BautagebuchEintrag {
   datum: string;
   text: string;
   taskIds?: string[];
+  fotoUrls?: string[];
 }
 
 export interface MangelChatMessage {
