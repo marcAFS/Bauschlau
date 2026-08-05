@@ -13,14 +13,11 @@ import {
 } from "lucide-react";
 import { useBauSchlauStore } from "@/lib/store";
 import { api } from "@/lib/api-client";
-import { BEREICH_LABEL, GEWERKE } from "@/lib/types";
+import { BEREICH_LABEL, GEWERKE, GEWERK_COLOR } from "@/lib/types";
 import type { Protokoll, ProtokollExtraktion } from "@/lib/types";
 import TaskModal from "@/components/TaskModal";
 
 const QUELLEN: Protokoll["quelle"][] = [...GEWERKE];
-
-const inputClass =
-  "w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-100 focus:border-orange-500 focus:outline-none";
 
 function ProtokollCard({ protokoll }: { protokoll: Protokoll }) {
   const deleteProtokoll = useBauSchlauStore((s) => s.deleteProtokoll);
@@ -181,15 +178,18 @@ export default function ProtokollModule() {
       </div>
 
       <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
-        <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-400">Quelle</label>
-          <select className={`${inputClass} sm:max-w-[220px]`} value={quelle} onChange={(e) => setQuelle(e.target.value as Protokoll["quelle"])}>
-            {QUELLEN.map((q) => (
-              <option key={q} value={q}>
-                {q}
-              </option>
-            ))}
-          </select>
+        <div className="flex flex-wrap gap-1.5">
+          {QUELLEN.map((q) => (
+            <button
+              key={q}
+              onClick={() => setQuelle(q)}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                quelle === q ? GEWERK_COLOR[q].active : GEWERK_COLOR[q].badge
+              }`}
+            >
+              {q}
+            </button>
+          ))}
         </div>
         <textarea
           value={text}
@@ -225,7 +225,7 @@ export default function ProtokollModule() {
                 key={q}
                 onClick={() => setFilter(q)}
                 className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                  filter === q ? "border-orange-500/50 bg-orange-500/10 text-orange-400" : "border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                  filter === q ? GEWERK_COLOR[q].active : GEWERK_COLOR[q].badge
                 }`}
               >
                 {q} ({count})
