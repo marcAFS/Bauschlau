@@ -5,6 +5,7 @@ import { X, Trash2 } from "lucide-react";
 import { useBauSchlauStore } from "@/lib/store";
 import type { Task, Bereich, TaskStatus, Ausfuehrung, Prioritaet, MaterialStatus } from "@/lib/types";
 import { BEREICH_LABEL, TASK_STATUS_LABEL } from "@/lib/types";
+import GewerkSelect from "@/components/GewerkSelect";
 
 interface Props {
   open: boolean;
@@ -157,7 +158,7 @@ export default function TaskModal({ open, onClose, task, prefill, onSaved }: Pro
               </div>
               <div>
                 <label className={labelClass}>Gewerk</label>
-                <input className={inputClass} value={form.gewerk} onChange={(e) => set("gewerk", e.target.value)} placeholder="z. B. Dachdecker" />
+                <GewerkSelect value={form.gewerk} onChange={(v) => set("gewerk", v)} className={inputClass} />
               </div>
             </div>
 

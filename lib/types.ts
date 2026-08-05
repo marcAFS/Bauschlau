@@ -147,6 +147,26 @@ export interface RaumProfil {
   createdAt: string;
 }
 
+export const GEWERKE = [
+  "Energieberater",
+  "Schornsteinfeger",
+  "Zimmermann",
+  "Maurer",
+  "Dachdecker",
+  "Elektriker",
+  "Installateur",
+  "Trockenbauer",
+  "Verputzer",
+  "Estrichleger",
+  "Fliesenleger",
+  "Maler/Lackierer",
+  "Fensterbauer/Schreiner",
+  "Gerüstbauer",
+  "Handwerker",
+  "Sonstiges",
+] as const;
+export type Gewerk = (typeof GEWERKE)[number];
+
 export interface ProtokollExtraktion {
   aufgaben: { titel: string; bereich: Bereich; beschreibung: string }[];
   auflagen: string[];
@@ -155,7 +175,7 @@ export interface ProtokollExtraktion {
 
 export interface Protokoll {
   id: string;
-  quelle: "Schornsteinfeger" | "Energieberater" | "Handwerker" | "Sonstiges";
+  quelle: Gewerk;
   text: string;
   extraktion?: ProtokollExtraktion;
   uebernommen: boolean;

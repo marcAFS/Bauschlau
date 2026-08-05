@@ -5,6 +5,7 @@ import { Wallet, Upload, Download, FileText, Trash2 } from "lucide-react";
 import { useBauSchlauStore } from "@/lib/store";
 import { formatCurrency, formatDate } from "@/lib/ui-helpers";
 import type { Rechnung } from "@/lib/types";
+import GewerkSelect from "@/components/GewerkSelect";
 
 const inputClass =
   "w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-100 focus:border-orange-500 focus:outline-none";
@@ -133,7 +134,7 @@ function RechnungUpload() {
           <div className="grid grid-cols-2 gap-2">
             <input type="number" step="0.01" placeholder="Betrag (€)" className={inputClass} value={form.betrag} onChange={(e) => setForm((f) => ({ ...f, betrag: e.target.value }))} />
             <input type="date" className={inputClass} value={form.datum} onChange={(e) => setForm((f) => ({ ...f, datum: e.target.value }))} />
-            <input placeholder="Gewerk" className={inputClass} value={form.gewerk} onChange={(e) => setForm((f) => ({ ...f, gewerk: e.target.value }))} />
+            <GewerkSelect value={form.gewerk} onChange={(v) => setForm((f) => ({ ...f, gewerk: v }))} className={inputClass} />
             <select className={inputClass} value={form.wohneinheit} onChange={(e) => setForm((f) => ({ ...f, wohneinheit: e.target.value as Rechnung["wohneinheit"] }))}>
               <option value="eigennutzung">Eigennutzung</option>
               <option value="mietwohnung">Mietwohnung</option>
