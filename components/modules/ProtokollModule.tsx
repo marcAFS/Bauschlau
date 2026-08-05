@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Trash2,
+  Search,
 } from "lucide-react";
 import { useBauSchlauStore } from "@/lib/store";
 import { api } from "@/lib/api-client";
@@ -18,6 +19,18 @@ import type { Protokoll, ProtokollExtraktion } from "@/lib/types";
 import TaskModal from "@/components/TaskModal";
 
 const QUELLEN: Protokoll["quelle"][] = [...GEWERKE];
+
+function protokollHaystack(p: Protokoll) {
+  return [
+    p.text,
+    p.quelle,
+    ...(p.extraktion?.aufgaben.flatMap((a) => [a.titel, a.beschreibung]) ?? []),
+    ...(p.extraktion?.auflagen ?? []),
+    ...(p.extraktion?.termine.map((t) => t.text) ?? []),
+  ]
+    .join(" ")
+    .toLowerCase();
+}
 
 function ProtokollCard({ protokoll }: { protokoll: Protokoll }) {
   const deleteProtokoll = useBauSchlauStore((s) => s.deleteProtokoll);
@@ -148,6 +161,7 @@ export default function ProtokollModule() {
   const [quelle, setQuelle] = useState<Protokoll["quelle"]>("Handwerker");
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<Protokoll["quelle"] | "alle">("alle");
+  const [suche, setSuche] = useState("");
 
   const verarbeiten = async () => {
     if (!text.trim()) return;
@@ -161,10 +175,14 @@ export default function ProtokollModule() {
     }
   };
 
-  const gefiltert = useMemo(
-    () => (filter === "alle" ? protokolle : protokolle.filter((p) => p.quelle === filter)),
-    [protokolle, filter]
-  );
+  const gefiltert = useMemo(() => {
+    const needle = suche.trim().toLowerCase();
+    return protokolle.filter((p) => {
+      if (filter !== "alle" && p.quelle !== filter) return false;
+      if (needle && !protokollHaystack(p).includes(needle)) return false;
+      return true;
+    });
+  }, [protokolle, filter, suche]);
 
   return (
     <div className="space-y-6">
@@ -208,30 +226,41 @@ export default function ProtokollModule() {
       </div>
 
       {protokolle.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <button
-            onClick={() => setFilter("alle")}
-            className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-              filter === "alle" ? "border-orange-500/50 bg-orange-500/10 text-orange-400" : "border-zinc-800 text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            Alle ({protokolle.length})
-          </button>
-          {QUELLEN.map((q) => {
-            const count = protokolle.filter((p) => p.quelle === q).length;
-            if (count === 0) return null;
-            return (
-              <button
-                key={q}
-                onClick={() => setFilter(q)}
-                className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                  filter === q ? GEWERK_COLOR[q].active : GEWERK_COLOR[q].badge
-                }`}
-              >
-                {q} ({count})
-              </button>
-            );
-          })}
+        <div className="space-y-2">
+          <div className="relative max-w-sm">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
+            <input
+              value={suche}
+              onChange={(e) => setSuche(e.target.value)}
+              placeholder="Stichwort suchen… (z. B. Fenster, Blower-Door)"
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 py-1.5 pl-8 pr-3 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              onClick={() => setFilter("alle")}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                filter === "alle" ? "border-orange-500/50 bg-orange-500/10 text-orange-400" : "border-zinc-800 text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              Alle ({protokolle.length})
+            </button>
+            {QUELLEN.map((q) => {
+              const count = protokolle.filter((p) => p.quelle === q).length;
+              if (count === 0) return null;
+              return (
+                <button
+                  key={q}
+                  onClick={() => setFilter(q)}
+                  className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                    filter === q ? GEWERK_COLOR[q].active : GEWERK_COLOR[q].badge
+                  }`}
+                >
+                  {q} ({count})
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
