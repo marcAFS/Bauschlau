@@ -115,6 +115,12 @@ function onSyncFail(set: (partial: Partial<BauSchlauState>) => void, message: st
   };
 }
 
+// Der Finanzierungsplan wird als Ganzes gespeichert. Schnell aufeinanderfolgende Änderungen
+// (mehrere Felder nacheinander) dürfen sich nicht überholen, sonst überschreibt ein älterer
+// Request einen neueren -> Speicherungen laufen strikt hintereinander und senden jeweils
+// den dann aktuellen Stand.
+let budgetPlanSpeichern: Promise<unknown> = Promise.resolve();
+
 export const useBauSchlauStore = create<BauSchlauState>()(
   persist(
     (set, get) => ({
@@ -302,9 +308,10 @@ export const useBauSchlauStore = create<BauSchlauState>()(
       },
 
       setBudgetPlan: (patch) => {
-        const plan = { ...get().budgetPlan, ...patch };
-        set({ budgetPlan: plan });
-        api.budgetPlan.save(plan).catch(onSyncFail(set, "Budgetplan konnte nicht gespeichert werden."));
+        set({ budgetPlan: { ...get().budgetPlan, ...patch } });
+        budgetPlanSpeichern = budgetPlanSpeichern
+          .then(() => api.budgetPlan.save(get().budgetPlan))
+          .catch(onSyncFail(set, "Budgetplan konnte nicht gespeichert werden."));
       },
       addBudgetPosten: (p) => {
         const posten: BudgetPosten = {
