@@ -1,6 +1,7 @@
 "use client";
 
-import { formatCurrency } from "@/lib/ui-helpers";
+const euro = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+const formatCurrency = (n: number) => euro.format(n);
 
 export interface SankeyKnoten {
   key: string;
@@ -17,11 +18,11 @@ interface Props {
   hubLabel: string;
 }
 
-const W = 900;
+const W = 820;
 const NODE_W = 14;
 const X_LEFT = 190;
-const X_HUB = 430;
-const X_RIGHT = 660;
+const X_HUB = 395;
+const X_RIGHT = 600;
 const BAR_H = 300;
 const MIN_H = 2;
 const GAP = 8;
@@ -95,7 +96,7 @@ export default function BudgetSankey({ quellen, ziele, hubLabel }: Props) {
     <div className="overflow-x-auto">
       <svg
         viewBox={`0 0 ${W} ${H}`}
-        className="h-auto w-full min-w-[720px]"
+        className="h-auto w-full min-w-[640px]"
         role="img"
         aria-label={`Finanzierung: ${formatCurrency(total)} verteilt auf ${ziele.length} Positionen`}
       >
@@ -157,13 +158,12 @@ export default function BudgetSankey({ quellen, ziele, hubLabel }: Props) {
               strokeWidth="1"
             />
             <text x={X_RIGHT + NODE_W + 10} y={z.mitte - 2} fontSize="12.5" fontWeight="600" className="fill-zinc-200">
-              {kuerzen(z.label, 24)} · {formatCurrency(z.value)}
+              {kuerzen(z.label, 26)}
             </text>
-            {z.detail && (
-              <text x={X_RIGHT + NODE_W + 10} y={z.mitte + 12} fontSize="11.5" className="fill-zinc-500">
-                {kuerzen(z.detail, 36)}
-              </text>
-            )}
+            <text x={X_RIGHT + NODE_W + 10} y={z.mitte + 12} fontSize="11.5" className="fill-zinc-400">
+              {formatCurrency(z.value)}
+              {z.detail ? ` · ${kuerzen(z.detail, 30)}` : ""}
+            </text>
           </g>
         ))}
       </svg>
