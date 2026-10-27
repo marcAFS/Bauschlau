@@ -285,7 +285,6 @@ export default function BudgetPlanungModule() {
   const { ungenutzt, kfwGenutzt, foerderfaehigeKosten } = verteilung;
   const fehlbetrag = Object.values(verteilung.anteile).reduce((a, x) => a + x.fehlbetrag, 0);
   const frei = ungenutzt.bank + ungenutzt.ek;
-  const ungenutztGesamt = ungenutzt.kfw + frei;
 
   const quellen = useMemo<SankeyKnoten[]>(() => {
     const liste: SankeyKnoten[] = [
@@ -307,18 +306,24 @@ export default function BudgetPlanungModule() {
         else if (p.ist) detail = `geplant · bisher ${formatCurrency(p.ist)}`;
         return { key: p.id, label: p.name, value: postenWert(p), color: p.umgesetzt ? FARBE_UMGESETZT : FARBE_PLAN, detail, geplant: !p.umgesetzt };
       });
-    if (ungenutztGesamt >= 0.5) {
-      liste.push({ key: "ungenutzt", label: "Nicht verplant", value: ungenutztGesamt, color: FARBE_REST, detail: ungenutzt.kfw >= 0.5 ? "enthält ungenutztes KfW" : "noch frei" });
+    // Nicht verplante Mittel je Quelle getrennt ausweisen, damit sichtbar ist, was von wem übrig bleibt.
+    const rest: { key: string; wert: number; quelle: string }[] = [
+      { key: "frei-kfw", wert: ungenutzt.kfw, quelle: "KfW-Darlehen" },
+      { key: "frei-bank", wert: ungenutzt.bank, quelle: "Bankdarlehen" },
+      { key: "frei-ek", wert: ungenutzt.ek, quelle: "Eigenkapital" },
+    ];
+    for (const r of rest) {
+      if (r.wert >= 0.5) liste.push({ key: r.key, label: "Nicht verplant", value: r.wert, color: FARBE_REST, detail: r.quelle });
     }
     return liste;
-  }, [budgetPosten, ungenutzt.kfw, ungenutztGesamt]);
+  }, [budgetPosten, ungenutzt]);
 
   const fluesse = useMemo<SankeyFluss[]>(() => {
     const liste: SankeyFluss[] = [];
     for (const [id, a] of Object.entries(verteilung.anteile)) {
       liste.push({ von: "kfw", nach: id, value: a.kfw }, { von: "bank", nach: id, value: a.bank }, { von: "ek", nach: id, value: a.ek }, { von: "fehl", nach: id, value: a.fehlbetrag });
     }
-    liste.push({ von: "kfw", nach: "ungenutzt", value: ungenutzt.kfw }, { von: "bank", nach: "ungenutzt", value: ungenutzt.bank }, { von: "ek", nach: "ungenutzt", value: ungenutzt.ek });
+    liste.push({ von: "kfw", nach: "frei-kfw", value: ungenutzt.kfw }, { von: "bank", nach: "frei-bank", value: ungenutzt.bank }, { von: "ek", nach: "frei-ek", value: ungenutzt.ek });
     return liste;
   }, [verteilung, ungenutzt]);
 
