@@ -27,3 +27,60 @@ export function parseGeld(input: string): number | undefined {
 }
 
 export const zahlFormat = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 2 });
+
+export interface Anteil {
+  kfw: number;
+  bank: number;
+  ek: number;
+  fehlbetrag: number;
+}
+
+export interface Verteilung {
+  anteile: Record<string, Anteil>;
+  /** Nicht abgerufene/verplante Mittel je Quelle. */
+  ungenutzt: { kfw: number; bank: number; ek: number };
+  foerderfaehigeKosten: number;
+  kfwGenutzt: number;
+}
+
+// Verteilt die Finanzierung auf die Positionen:
+// 1. KfW zweckgebunden – nur in förderfähige Positionen, anteilig nach Kosten.
+// 2. Den Rest deckt zuerst das Bankdarlehen (anteilig), danach das Eigenkapital.
+// 3. Was dann noch fehlt, ist Fehlbetrag.
+export function verteileFinanzierung(plan: BudgetPlan, posten: BudgetPosten[]): Verteilung {
+  const items = posten.map((p) => ({ p, wert: postenWert(p) })).filter((i) => i.wert > 0);
+
+  const foerderfaehigeKosten = items.filter((i) => i.p.kfwFaehig).reduce((a, i) => a + i.wert, 0);
+  const kfwGenutzt = Math.min(plan.kfwDarlehen, foerderfaehigeKosten);
+
+  const nachKfw = items.map((i) => {
+    const kfw = i.p.kfwFaehig && foerderfaehigeKosten > 0 ? (kfwGenutzt * i.wert) / foerderfaehigeKosten : 0;
+    return { ...i, kfw, rest: i.wert - kfw };
+  });
+  const restNachKfw = nachKfw.reduce((a, i) => a + i.rest, 0);
+
+  const bankGenutzt = Math.min(plan.bankDarlehen, restNachKfw);
+  const nachBank = nachKfw.map((i) => {
+    const bank = restNachKfw > 0 ? (bankGenutzt * i.rest) / restNachKfw : 0;
+    return { ...i, bank, rest2: i.rest - bank };
+  });
+  const restNachBank = restNachKfw - bankGenutzt;
+
+  const ekGenutzt = Math.min(plan.eigenkapital, restNachBank);
+  const anteile: Record<string, Anteil> = {};
+  for (const i of nachBank) {
+    const ek = restNachBank > 0 ? (ekGenutzt * i.rest2) / restNachBank : 0;
+    anteile[i.p.id] = { kfw: i.kfw, bank: i.bank, ek, fehlbetrag: Math.max(i.rest2 - ek, 0) };
+  }
+
+  return {
+    anteile,
+    ungenutzt: {
+      kfw: plan.kfwDarlehen - kfwGenutzt,
+      bank: plan.bankDarlehen - bankGenutzt,
+      ek: plan.eigenkapital - ekGenutzt,
+    },
+    foerderfaehigeKosten,
+    kfwGenutzt,
+  };
+}

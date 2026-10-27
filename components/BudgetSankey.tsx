@@ -12,23 +12,28 @@ export interface SankeyKnoten {
   geplant?: boolean; // schraffiert darstellen (noch nicht umgesetzt)
 }
 
+export interface SankeyFluss {
+  von: string;
+  nach: string;
+  value: number;
+}
+
 interface Props {
   quellen: SankeyKnoten[];
   ziele: SankeyKnoten[];
-  hubLabel: string;
+  fluesse: SankeyFluss[];
 }
 
 const W = 820;
 const NODE_W = 14;
 const X_LEFT = 190;
-const X_HUB = 395;
-const X_RIGHT = 600;
+const X_RIGHT = 570;
 const BAR_H = 300;
 const MIN_H = 2;
 const GAP = 8;
 const SLOT_LEFT = 34;
 const SLOT_RIGHT = 32;
-const PAD_TOP = 48;
+const PAD_TOP = 16;
 const PAD_BOTTOM = 16;
 
 function kuerzen(text: string, max: number) {
@@ -46,49 +51,56 @@ interface Platziert extends SankeyKnoten {
   mitte: number; // vertikale Mitte des Slots (für Label)
 }
 
-// Verteilt Knoten in einer Spalte untereinander; jeder bekommt mindestens Platz für sein Label.
-function platziere(knoten: SankeyKnoten[], total: number, minSlot: number, top: number, innerH: number): Platziert[] {
+function hoehen(knoten: SankeyKnoten[], total: number, minSlot: number) {
   const hs = knoten.map((k) => Math.max((k.value / total) * BAR_H, MIN_H));
   const slots = hs.map((h) => Math.max(h, minSlot));
   const colH = slots.reduce((a, s) => a + s, 0) + GAP * Math.max(knoten.length - 1, 0);
-  let cursor = top + (innerH - colH) / 2;
+  return { hs, slots, colH };
+}
+
+// Verteilt Knoten einer Spalte untereinander; jeder bekommt mindestens Platz für sein Label.
+function platziere(knoten: SankeyKnoten[], total: number, minSlot: number, innerH: number): Platziert[] {
+  const { hs, slots, colH } = hoehen(knoten, total, minSlot);
+  let cursor = PAD_TOP + (innerH - colH) / 2;
   return knoten.map((k, i) => {
-    const y = cursor + (slots[i] - hs[i]) / 2;
-    const out = { ...k, h: hs[i], y, mitte: cursor + slots[i] / 2 };
+    const out = { ...k, h: hs[i], y: cursor + (slots[i] - hs[i]) / 2, mitte: cursor + slots[i] / 2 };
     cursor += slots[i] + GAP;
     return out;
   });
 }
 
-// Legt Segmente lückenlos untereinander (Ein-/Ausgänge des mittleren Knotens).
-function stapeln(hoehen: number[], start: number) {
-  let y = start;
-  return hoehen.map((h) => {
-    const seg = { a: y, b: y + h };
-    y += h;
-    return seg;
-  });
-}
+export default function BudgetSankey({ quellen, ziele, fluesse }: Props) {
+  const total = ziele.reduce((a, z) => a + z.value, 0);
+  if (total <= 0 || quellen.length === 0) return null;
 
-export default function BudgetSankey({ quellen, ziele, hubLabel }: Props) {
-  const total = quellen.reduce((a, q) => a + q.value, 0);
-  if (total <= 0 || ziele.length === 0) return null;
-
-  const rawL = quellen.map((q) => Math.max((q.value / total) * BAR_H, MIN_H));
-  const rawR = ziele.map((z) => Math.max((z.value / total) * BAR_H, MIN_H));
-  const hubH = Math.max(rawL.reduce((a, h) => a + h, 0), rawR.reduce((a, h) => a + h, 0));
-
-  const colL = rawL.map((h) => Math.max(h, SLOT_LEFT)).reduce((a, s) => a + s, 0) + GAP * (quellen.length - 1);
-  const colR = rawR.map((h) => Math.max(h, SLOT_RIGHT)).reduce((a, s) => a + s, 0) + GAP * (ziele.length - 1);
-  const innerH = Math.max(colL, colR, hubH);
+  const innerH = Math.max(hoehen(quellen, total, SLOT_LEFT).colH, hoehen(ziele, total, SLOT_RIGHT).colH);
   const H = PAD_TOP + innerH + PAD_BOTTOM;
 
-  const links = platziere(quellen, total, SLOT_LEFT, PAD_TOP, innerH);
-  const rechts = platziere(ziele, total, SLOT_RIGHT, PAD_TOP, innerH);
-  const hubTop = PAD_TOP + (innerH - hubH) / 2;
+  const links = platziere(quellen, total, SLOT_LEFT, innerH);
+  const rechts = platziere(ziele, total, SLOT_RIGHT, innerH);
 
-  const eingehend = stapeln(links.map((q) => q.h), hubTop);
-  const ausgehend = stapeln(rechts.map((z) => z.h), hubTop);
+  // Jede Quelle gibt ihre Flüsse in Zielreihenfolge ab, jedes Ziel nimmt sie in Quellenreihenfolge auf
+  // -> keine überkreuzenden Bänder innerhalb eines Knotens.
+  const outY = new Map(links.map((l) => [l.key, l.y]));
+  const inY = new Map(rechts.map((r) => [r.key, r.y]));
+  const baender: { key: string; d: string; farbe: string; titel: string }[] = [];
+  for (const q of links) {
+    for (const z of rechts) {
+      const f = fluesse.find((x) => x.von === q.key && x.nach === z.key);
+      if (!f || f.value <= 0) continue;
+      const h = (f.value / total) * BAR_H;
+      const y0 = outY.get(q.key) ?? 0;
+      const y1 = inY.get(z.key) ?? 0;
+      baender.push({
+        key: `${q.key}-${z.key}`,
+        d: band(X_LEFT + NODE_W, y0, y0 + h, X_RIGHT, y1, y1 + h),
+        farbe: q.color,
+        titel: `${q.label} → ${z.label}: ${formatCurrency(f.value)}`,
+      });
+      outY.set(q.key, y0 + h);
+      inY.set(z.key, y1 + h);
+    }
+  }
 
   const geplanteZiele = ziele.filter((z) => z.geplant);
 
@@ -109,19 +121,9 @@ export default function BudgetSankey({ quellen, ziele, hubLabel }: Props) {
           ))}
         </defs>
 
-        {links.map((q, i) => (
-          <path key={q.key} d={band(X_LEFT + NODE_W, q.y, q.y + q.h, X_HUB, eingehend[i].a, eingehend[i].b)} fill={q.color} fillOpacity="0.3">
-            <title>{`${q.label}: ${formatCurrency(q.value)}`}</title>
-          </path>
-        ))}
-        {rechts.map((z, i) => (
-          <path
-            key={z.key}
-            d={band(X_HUB + NODE_W, ausgehend[i].a, ausgehend[i].b, X_RIGHT, z.y, z.y + z.h)}
-            fill={z.geplant ? `url(#hatch-${z.key})` : z.color}
-            fillOpacity={z.geplant ? 1 : 0.32}
-          >
-            <title>{`${z.label}: ${formatCurrency(z.value)}${z.detail ? ` (${z.detail})` : ""}`}</title>
+        {baender.map((b) => (
+          <path key={b.key} d={b.d} fill={b.farbe} fillOpacity="0.32">
+            <title>{b.titel}</title>
           </path>
         ))}
 
@@ -133,17 +135,10 @@ export default function BudgetSankey({ quellen, ziele, hubLabel }: Props) {
             </text>
             <text x={X_LEFT - 10} y={q.mitte + 12} textAnchor="end" fontSize="11.5" className="fill-zinc-400">
               {formatCurrency(q.value)}
+              {q.detail ? ` · ${kuerzen(q.detail, 22)}` : ""}
             </text>
           </g>
         ))}
-
-        <rect x={X_HUB} y={hubTop} width={NODE_W} height={hubH} rx="2" className="fill-zinc-400" />
-        <text x={X_HUB + NODE_W / 2} y={hubTop - 24} textAnchor="middle" fontSize="12.5" fontWeight="600" className="fill-zinc-200">
-          {hubLabel}
-        </text>
-        <text x={X_HUB + NODE_W / 2} y={hubTop - 9} textAnchor="middle" fontSize="11.5" className="fill-zinc-400">
-          {formatCurrency(total)}
-        </text>
 
         {rechts.map((z) => (
           <g key={z.key}>

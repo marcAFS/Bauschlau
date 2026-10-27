@@ -4,9 +4,9 @@ import { useMemo, useState } from "react";
 import { Plus, Trash2, CheckCircle2, Circle } from "lucide-react";
 import { useBauSchlauStore } from "@/lib/store";
 import { formatCurrency } from "@/lib/ui-helpers";
-import { berechneBudget, parseGeld, postenWert, zahlFormat } from "@/lib/budget-calc";
+import { berechneBudget, parseGeld, postenWert, verteileFinanzierung, zahlFormat, type Anteil } from "@/lib/budget-calc";
 import type { BudgetPosten } from "@/lib/types";
-import BudgetSankey, { type SankeyKnoten } from "@/components/BudgetSankey";
+import BudgetSankey, { type SankeyFluss, type SankeyKnoten } from "@/components/BudgetSankey";
 
 const inputClass =
   "w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-orange-500 focus:outline-none";
@@ -100,10 +100,18 @@ function Kachel({ label, wert, sub, farbe = "text-zinc-100" }: { label: string; 
   );
 }
 
-function PostenZeile({ posten }: { posten: BudgetPosten }) {
+function PostenZeile({ posten, anteil }: { posten: BudgetPosten; anteil?: Anteil }) {
   const updateBudgetPosten = useBauSchlauStore((s) => s.updateBudgetPosten);
   const deleteBudgetPosten = useBauSchlauStore((s) => s.deleteBudgetPosten);
   const abweichung = posten.ist !== undefined && posten.umgesetzt ? posten.ist - posten.geplant : undefined;
+  const finanzierung = anteil
+    ? [
+        { label: "KfW", wert: anteil.kfw, farbe: "text-amber-300" },
+        { label: "Bank", wert: anteil.bank, farbe: "text-blue-300" },
+        { label: "Eigenkapital", wert: anteil.ek, farbe: "text-emerald-300" },
+        { label: "ungedeckt", wert: anteil.fehlbetrag, farbe: "text-red-400" },
+      ].filter((f) => f.wert >= 0.5)
+    : [];
 
   return (
     <div className={`rounded-lg border p-3 ${posten.umgesetzt ? "border-emerald-500/30 bg-emerald-500/5" : "border-zinc-800 bg-zinc-900/40"}`}>
@@ -135,6 +143,29 @@ function PostenZeile({ posten }: { posten: BudgetPosten }) {
           />
         </div>
       </div>
+      <button
+        onClick={() => updateBudgetPosten(posten.id, { kfwFaehig: !posten.kfwFaehig })}
+        aria-pressed={posten.kfwFaehig}
+        title="Nur wenn die Maßnahme nach deinem KfW-Programm förderfähig ist"
+        className={`mt-2 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${
+          posten.kfwFaehig ? "border-amber-500/60 bg-amber-500/15 text-amber-300" : "border-zinc-700 text-zinc-500 hover:text-zinc-300"
+        }`}
+      >
+        {posten.kfwFaehig ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Circle className="h-3.5 w-3.5" />} KfW-förderfähig
+      </button>
+      {finanzierung.length > 0 && (
+        <p className="mt-1.5 text-[11px] text-zinc-500">
+          Finanziert aus:{" "}
+          {finanzierung.map((f, i) => (
+            <span key={f.label}>
+              {i > 0 && " · "}
+              <span className={f.farbe}>
+                {f.label} {formatCurrency(f.wert)}
+              </span>
+            </span>
+          ))}
+        </p>
+      )}
       {abweichung !== undefined && abweichung !== 0 && (
         <p className={`mt-1.5 text-[11px] ${abweichung > 0 ? "text-red-400" : "text-emerald-400"}`}>
           {formatCurrency(Math.abs(abweichung))} {abweichung > 0 ? "teurer" : "günstiger"} als geplant
@@ -156,34 +187,46 @@ export default function BudgetPlanungModule() {
   const kennzahlen = useMemo(() => berechneBudget(budgetPlan, budgetPosten), [budgetPlan, budgetPosten]);
   const { budget, geplant, ausgegeben, prognose, rest } = kennzahlen;
 
+  const verteilung = useMemo(() => verteileFinanzierung(budgetPlan, budgetPosten), [budgetPlan, budgetPosten]);
+  const { ungenutzt, kfwGenutzt, foerderfaehigeKosten } = verteilung;
+  const fehlbetrag = Object.values(verteilung.anteile).reduce((a, x) => a + x.fehlbetrag, 0);
+  const frei = ungenutzt.bank + ungenutzt.ek;
+  const ungenutztGesamt = ungenutzt.kfw + frei;
+
   const quellen = useMemo<SankeyKnoten[]>(() => {
     const liste: SankeyKnoten[] = [
-      { key: "ek", label: "Eigenkapital", value: budgetPlan.eigenkapital, color: FARBE_EK },
+      { key: "kfw", label: "KfW-Darlehen", value: budgetPlan.kfwDarlehen, color: FARBE_KFW, detail: "zweckgebunden" },
       { key: "bank", label: "Bankdarlehen", value: budgetPlan.bankDarlehen, color: FARBE_BANK },
-      { key: "kfw", label: "KfW-Darlehen", value: budgetPlan.kfwDarlehen, color: FARBE_KFW },
+      { key: "ek", label: "Eigenkapital", value: budgetPlan.eigenkapital, color: FARBE_EK },
     ].filter((q) => q.value > 0);
-    if (prognose > budget) {
-      liste.push({ key: "fehl", label: "Fehlbetrag (nicht gedeckt)", value: prognose - budget, color: FARBE_FEHLBETRAG });
-    }
+    if (fehlbetrag >= 0.5) liste.push({ key: "fehl", label: "Fehlbetrag (ungedeckt)", value: fehlbetrag, color: FARBE_FEHLBETRAG });
     return liste;
-  }, [budgetPlan, prognose, budget]);
+  }, [budgetPlan, fehlbetrag]);
 
   const ziele = useMemo<SankeyKnoten[]>(() => {
     const liste: SankeyKnoten[] = budgetPosten
       .filter((p) => postenWert(p) > 0)
       .sort((a, b) => postenWert(b) - postenWert(a))
       .map((p) => {
-        const wert = postenWert(p);
         let detail = "geplant";
         if (p.umgesetzt) detail = p.ist !== undefined && p.ist !== p.geplant ? `umgesetzt · Plan ${formatCurrency(p.geplant)}` : "umgesetzt";
         else if (p.ist) detail = `geplant · bisher ${formatCurrency(p.ist)}`;
-        return { key: p.id, label: p.name, value: wert, color: p.umgesetzt ? FARBE_UMGESETZT : FARBE_PLAN, detail, geplant: !p.umgesetzt };
+        return { key: p.id, label: p.name, value: postenWert(p), color: p.umgesetzt ? FARBE_UMGESETZT : FARBE_PLAN, detail, geplant: !p.umgesetzt };
       });
-    if (budget > prognose) {
-      liste.push({ key: "rest", label: "Rest / Puffer", value: budget - prognose, color: FARBE_REST, detail: "noch nicht verplant" });
+    if (ungenutztGesamt >= 0.5) {
+      liste.push({ key: "ungenutzt", label: "Nicht verplant", value: ungenutztGesamt, color: FARBE_REST, detail: ungenutzt.kfw >= 0.5 ? "enthält ungenutztes KfW" : "noch frei" });
     }
     return liste;
-  }, [budgetPosten, budget, prognose]);
+  }, [budgetPosten, ungenutzt.kfw, ungenutztGesamt]);
+
+  const fluesse = useMemo<SankeyFluss[]>(() => {
+    const liste: SankeyFluss[] = [];
+    for (const [id, a] of Object.entries(verteilung.anteile)) {
+      liste.push({ von: "kfw", nach: id, value: a.kfw }, { von: "bank", nach: id, value: a.bank }, { von: "ek", nach: id, value: a.ek }, { von: "fehl", nach: id, value: a.fehlbetrag });
+    }
+    liste.push({ von: "kfw", nach: "ungenutzt", value: ungenutzt.kfw }, { von: "bank", nach: "ungenutzt", value: ungenutzt.bank }, { von: "ek", nach: "ungenutzt", value: ungenutzt.ek });
+    return liste;
+  }, [verteilung, ungenutzt]);
 
   const vorhandene = new Set(budgetPosten.map((p) => p.name.trim().toLowerCase()));
   const offeneVorschlaege = VORSCHLAEGE.filter((v) => !vorhandene.has(v.toLowerCase()));
@@ -205,7 +248,7 @@ export default function BudgetPlanungModule() {
     <div className="space-y-8">
       <section>
         <h3 className="mb-1 text-sm font-semibold text-zinc-300">Finanzierung</h3>
-        <p className="mb-3 text-xs text-zinc-500">Woher kommt das Geld? Die Summe ist dein Gesamtbudget.</p>
+        <p className="mb-3 text-xs text-zinc-500">Woher kommt das Geld? Die Summe ist dein Gesamtbudget. Das KfW-Darlehen ist zweckgebunden und wird nur für förderfähige Positionen eingesetzt, danach deckt die Bank den Rest, dann das Eigenkapital.</p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {anteile.map((a, i) => (
             <div key={a.label} className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
@@ -232,18 +275,35 @@ export default function BudgetPlanungModule() {
         )}
       </section>
 
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <Kachel label="Gesamtbudget" wert={formatCurrency(budget)} />
         <Kachel label="Geplant" wert={formatCurrency(geplant)} sub="Summe aller Planwerte" />
         <Kachel label="Bisher angefallen" wert={formatCurrency(ausgegeben)} sub="Summe der Ist-Werte" />
         <Kachel label="Prognose" wert={formatCurrency(prognose)} sub="Ist, wo umgesetzt – sonst Plan" />
         <Kachel
-          label={rest >= 0 ? "Noch frei" : "Fehlbetrag"}
-          wert={formatCurrency(Math.abs(rest))}
-          farbe={rest >= 0 ? "text-emerald-400" : "text-red-400"}
-          sub={budget > 0 ? `${Math.round((prognose / budget) * 100)} % des Budgets verplant` : undefined}
+          label="KfW genutzt"
+          wert={formatCurrency(kfwGenutzt)}
+          sub={`von ${formatCurrency(budgetPlan.kfwDarlehen)} · förderfähig: ${formatCurrency(foerderfaehigeKosten)}`}
+          farbe="text-amber-300"
+        />
+        <Kachel
+          label={fehlbetrag >= 0.5 ? "Fehlbetrag" : "Noch frei"}
+          wert={formatCurrency(fehlbetrag >= 0.5 ? fehlbetrag : frei)}
+          farbe={fehlbetrag >= 0.5 ? "text-red-400" : "text-emerald-400"}
+          sub={fehlbetrag >= 0.5 ? "Kosten ohne passende Finanzierung" : "Bank + Eigenkapital, nicht verplant"}
         />
       </section>
+
+      {ungenutzt.kfw >= 0.5 && (
+        <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+          {formatCurrency(ungenutzt.kfw)} des KfW-Darlehens haben keine förderfähige Position. Das Darlehen ist zweckgebunden – markiere weitere passende Positionen als „KfW-förderfähig“, sonst kann dieser Teil nicht eingesetzt werden.
+        </p>
+      )}
+      {fehlbetrag >= 0.5 && (
+        <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+          {formatCurrency(fehlbetrag)} der geplanten Kosten sind nicht durch Bank, Eigenkapital oder KfW gedeckt.
+        </p>
+      )}
 
       <section>
         <h3 className="mb-1 text-sm font-semibold text-zinc-300">Mittelverwendung</h3>
@@ -267,14 +327,14 @@ export default function BudgetPlanungModule() {
               {quellen.length === 0 ? "Trage mindestens einen Finanzierungswert ein." : "Lege mindestens eine Position mit einem Betrag an."}
             </p>
           ) : (
-            <BudgetSankey quellen={quellen} ziele={ziele} hubLabel="Gesamtbudget" />
+            <BudgetSankey quellen={quellen} ziele={ziele} fluesse={fluesse} />
           )}
         </div>
       </section>
 
       <section>
         <h3 className="mb-1 text-sm font-semibold text-zinc-300">Positionen ({budgetPosten.length})</h3>
-        <p className="mb-3 text-xs text-zinc-500">Plan-Wert eintragen, später den tatsächlichen Betrag ergänzen und per Haken als umgesetzt markieren.</p>
+        <p className="mb-3 text-xs text-zinc-500">Plan-Wert eintragen, später den tatsächlichen Betrag ergänzen und per Haken als umgesetzt markieren. „KfW-förderfähig“ nur setzen, wenn die Maßnahme von deinem KfW-Darlehen bezahlt werden darf.</p>
 
         <div className="mb-3 flex flex-col gap-2 rounded-xl border border-zinc-800 bg-zinc-900/40 p-3 sm:flex-row">
           <input
@@ -315,7 +375,7 @@ export default function BudgetPlanungModule() {
         ) : (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {budgetPosten.map((p) => (
-              <PostenZeile key={p.id} posten={p} />
+              <PostenZeile key={p.id} posten={p} anteil={verteilung.anteile[p.id]} />
             ))}
           </div>
         )}

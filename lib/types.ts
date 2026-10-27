@@ -224,6 +224,7 @@ export interface BudgetPosten {
   geplant: number;
   ist?: number; // bisher angefallene/bezahlte Kosten
   umgesetzt: boolean; // Maßnahme fertig -> Ist ersetzt den Plan-Wert
+  kfwFaehig: boolean; // darf aus dem (zweckgebundenen) KfW-Darlehen bezahlt werden
   createdAt: string;
 }
 

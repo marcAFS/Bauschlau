@@ -318,6 +318,7 @@ export const useBauSchlauStore = create<BauSchlauState>()(
           name: p.name,
           geplant: p.geplant ?? 0,
           umgesetzt: false,
+          kfwFaehig: false,
           id: uuid(),
           createdAt: new Date().toISOString(),
         };
