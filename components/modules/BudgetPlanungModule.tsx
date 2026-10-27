@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Trash2, CheckCircle2, Circle } from "lucide-react";
 import { useBauSchlauStore } from "@/lib/store";
 import { formatCurrency } from "@/lib/ui-helpers";
@@ -105,26 +105,50 @@ function Kachel({ label, wert, sub, farbe = "text-zinc-100" }: { label: string; 
 function AufteilungsRegler({ posten, anteil, freiBank, freiEk }: { posten: BudgetPosten; anteil: Anteil; freiBank: number; freiEk: number }) {
   const updateBudgetPosten = useBauSchlauStore((s) => s.updateBudgetPosten);
   const [zieh, setZieh] = useState<number | null>(null);
+  const ziehRef = useRef<number | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const istRef = useRef(0);
 
   const rest = anteil.bank + anteil.ek + anteil.fehlbetrag;
-  if (rest < 0.5) return null;
 
   const maxBank = Math.min(rest, anteil.bank + freiBank);
   const minBank = Math.min(Math.max(0, rest - anteil.ek - freiEk), maxBank);
-  const minPct = (minBank / rest) * 100;
-  const maxPct = (maxBank / rest) * 100;
-  const istPct = (anteil.bank / rest) * 100;
+  const minPct = rest > 0 ? (minBank / rest) * 100 : 0;
+  const maxPct = rest > 0 ? (maxBank / rest) * 100 : 0;
+  const istPct = rest > 0 ? (anteil.bank / rest) * 100 : 0;
+
+  // Änderungen werden entprellt gespeichert; unveränderte Werte lassen die Position automatisch.
+  const speichern = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    const wert = ziehRef.current;
+    ziehRef.current = null;
+    setZieh(null);
+    if (wert !== null && Math.abs(wert - istRef.current) > 0.05) {
+      updateBudgetPosten(posten.id, { bankAnteil: Math.round(wert * 10) / 10 });
+    }
+  };
+  useEffect(() => {
+    istRef.current = istPct;
+  });
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
+
+  if (rest < 0.5) return null;
+
   const pct = Math.min(Math.max(zieh ?? istPct, minPct), maxPct);
   const bank = (rest * pct) / 100;
   const ek = rest - bank;
   const manuell = posten.bankAnteil != null;
   const festgelegt = maxPct - minPct < 0.5;
 
-  const abschliessen = () => {
-    if (zieh !== null) {
-      updateBudgetPosten(posten.id, { bankAnteil: Math.round(pct * 10) / 10 });
-      setZieh(null);
-    }
+  const geaendert = (roh: number) => {
+    const wert = Math.min(Math.max(roh, minPct), maxPct);
+    ziehRef.current = wert;
+    setZieh(wert);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(speichern, 500);
   };
 
   return (
@@ -146,10 +170,10 @@ function AufteilungsRegler({ posten, anteil, freiBank, freiEk }: { posten: Budge
           value={pct}
           disabled={festgelegt}
           aria-label={`Aufteilung Bank/Eigenkapital ${posten.name}`}
-          onChange={(e) => setZieh(Number(e.target.value))}
-          onPointerUp={abschliessen}
-          onKeyUp={abschliessen}
-          onBlur={abschliessen}
+          onChange={(e) => geaendert(Number(e.target.value))}
+          onPointerUp={speichern}
+          onKeyUp={speichern}
+          onBlur={speichern}
           className="absolute inset-0 h-5 w-full cursor-pointer appearance-none bg-transparent disabled:cursor-not-allowed disabled:opacity-40 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-orange-500 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-orange-500"
         />
       </div>
@@ -235,7 +259,7 @@ function PostenZeile({ posten, anteil, freiBank, freiEk }: { posten: BudgetPoste
           ))}
         </p>
       )}
-      {anteil && <AufteilungsRegler posten={posten} anteil={anteil} freiBank={freiBank} freiEk={freiEk} />}
+      {anteil && <AufteilungsRegler key={String(posten.bankAnteil ?? "auto")} posten={posten} anteil={anteil} freiBank={freiBank} freiEk={freiEk} />}
       {abweichung !== undefined && abweichung !== 0 && (
         <p className={`mt-1.5 text-[11px] ${abweichung > 0 ? "text-red-400" : "text-emerald-400"}`}>
           {formatCurrency(Math.abs(abweichung))} {abweichung > 0 ? "teurer" : "günstiger"} als geplant
