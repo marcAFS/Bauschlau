@@ -185,7 +185,7 @@ export default function BudgetPlanungModule() {
   const [neuerBetrag, setNeuerBetrag] = useState<number | undefined>(undefined);
 
   const kennzahlen = useMemo(() => berechneBudget(budgetPlan, budgetPosten), [budgetPlan, budgetPosten]);
-  const { budget, geplant, ausgegeben, prognose, rest } = kennzahlen;
+  const { budget, geplant, ausgegeben, prognose } = kennzahlen;
 
   const verteilung = useMemo(() => verteileFinanzierung(budgetPlan, budgetPosten), [budgetPlan, budgetPosten]);
   const { ungenutzt, kfwGenutzt, foerderfaehigeKosten } = verteilung;
