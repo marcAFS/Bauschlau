@@ -100,7 +100,76 @@ function Kachel({ label, wert, sub, farbe = "text-zinc-100" }: { label: string; 
   );
 }
 
-function PostenZeile({ posten, anteil }: { posten: BudgetPosten; anteil?: Anteil }) {
+// Regler: Aufteilung des Nicht-KfW-Rests einer Position auf Bank und Eigenkapital.
+// Die Töpfe sind endlich: Was andere Positionen schon belegen, steht hier nicht mehr zur Verfügung.
+function AufteilungsRegler({ posten, anteil, freiBank, freiEk }: { posten: BudgetPosten; anteil: Anteil; freiBank: number; freiEk: number }) {
+  const updateBudgetPosten = useBauSchlauStore((s) => s.updateBudgetPosten);
+  const [zieh, setZieh] = useState<number | null>(null);
+
+  const rest = anteil.bank + anteil.ek + anteil.fehlbetrag;
+  if (rest < 0.5) return null;
+
+  const maxBank = Math.min(rest, anteil.bank + freiBank);
+  const minBank = Math.min(Math.max(0, rest - anteil.ek - freiEk), maxBank);
+  const minPct = (minBank / rest) * 100;
+  const maxPct = (maxBank / rest) * 100;
+  const istPct = (anteil.bank / rest) * 100;
+  const pct = Math.min(Math.max(zieh ?? istPct, minPct), maxPct);
+  const bank = (rest * pct) / 100;
+  const ek = rest - bank;
+  const manuell = posten.bankAnteil != null;
+  const festgelegt = maxPct - minPct < 0.5;
+
+  const abschliessen = () => {
+    if (zieh !== null) {
+      updateBudgetPosten(posten.id, { bankAnteil: Math.round(pct * 10) / 10 });
+      setZieh(null);
+    }
+  };
+
+  return (
+    <div className="mt-2 rounded-lg border border-zinc-800 bg-zinc-950/40 p-2.5">
+      <div className="mb-1.5 flex items-center justify-between text-[11px]">
+        <span className="font-medium text-blue-300">Bank {formatCurrency(bank)}</span>
+        <span className="text-zinc-500">{manuell ? "manuell" : "automatisch"}</span>
+        <span className="font-medium text-emerald-300">Eigenkapital {formatCurrency(ek)}</span>
+      </div>
+      <div className="relative h-5">
+        <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 overflow-hidden rounded-full bg-zinc-800">
+          <div className="absolute inset-y-0 bg-zinc-600" style={{ left: `${minPct}%`, width: `${Math.max(maxPct - minPct, 0)}%` }} />
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={0.1}
+          value={pct}
+          disabled={festgelegt}
+          aria-label={`Aufteilung Bank/Eigenkapital ${posten.name}`}
+          onChange={(e) => setZieh(Number(e.target.value))}
+          onPointerUp={abschliessen}
+          onKeyUp={abschliessen}
+          onBlur={abschliessen}
+          className="absolute inset-0 h-5 w-full cursor-pointer appearance-none bg-transparent disabled:cursor-not-allowed disabled:opacity-40 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-orange-500 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-orange-500"
+        />
+      </div>
+      <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-amber-400/90">
+        <span>
+          {festgelegt
+            ? "Bank und Eigenkapital sind ausgeschöpft – nichts zu verschieben."
+            : [pct >= maxPct - 0.05 && freiBank < 0.5 ? "Bank ausgeschöpft" : "", pct <= minPct + 0.05 && freiEk < 0.5 ? "Eigenkapital ausgeschöpft" : ""].filter(Boolean).join(" · ")}
+        </span>
+        {manuell && (
+          <button onClick={() => updateBudgetPosten(posten.id, { bankAnteil: null })} className="shrink-0 rounded-md border border-zinc-700 px-2 py-0.5 text-zinc-300 hover:text-white">
+            Auto
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PostenZeile({ posten, anteil, freiBank, freiEk }: { posten: BudgetPosten; anteil?: Anteil; freiBank: number; freiEk: number }) {
   const updateBudgetPosten = useBauSchlauStore((s) => s.updateBudgetPosten);
   const deleteBudgetPosten = useBauSchlauStore((s) => s.deleteBudgetPosten);
   const abweichung = posten.ist !== undefined && posten.umgesetzt ? posten.ist - posten.geplant : undefined;
@@ -166,6 +235,7 @@ function PostenZeile({ posten, anteil }: { posten: BudgetPosten; anteil?: Anteil
           ))}
         </p>
       )}
+      {anteil && <AufteilungsRegler posten={posten} anteil={anteil} freiBank={freiBank} freiEk={freiEk} />}
       {abweichung !== undefined && abweichung !== 0 && (
         <p className={`mt-1.5 text-[11px] ${abweichung > 0 ? "text-red-400" : "text-emerald-400"}`}>
           {formatCurrency(Math.abs(abweichung))} {abweichung > 0 ? "teurer" : "günstiger"} als geplant
@@ -248,7 +318,7 @@ export default function BudgetPlanungModule() {
     <div className="space-y-8">
       <section>
         <h3 className="mb-1 text-sm font-semibold text-zinc-300">Finanzierung</h3>
-        <p className="mb-3 text-xs text-zinc-500">Woher kommt das Geld? Die Summe ist dein Gesamtbudget. Das KfW-Darlehen ist zweckgebunden und wird nur für förderfähige Positionen eingesetzt, danach deckt die Bank den Rest, dann das Eigenkapital.</p>
+        <p className="mb-3 text-xs text-zinc-500">Woher kommt das Geld? Die Summe ist dein Gesamtbudget. Das KfW-Darlehen ist zweckgebunden und wird nur für förderfähige Positionen eingesetzt. Den Rest deckt automatisch zuerst die Bank, dann das Eigenkapital – pro Position kannst du das mit dem Regler selbst festlegen.</p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {anteile.map((a, i) => (
             <div key={a.label} className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
@@ -375,7 +445,7 @@ export default function BudgetPlanungModule() {
         ) : (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {budgetPosten.map((p) => (
-              <PostenZeile key={p.id} posten={p} anteil={verteilung.anteile[p.id]} />
+              <PostenZeile key={p.id} posten={p} anteil={verteilung.anteile[p.id]} freiBank={ungenutzt.bank} freiEk={ungenutzt.ek} />
             ))}
           </div>
         )}

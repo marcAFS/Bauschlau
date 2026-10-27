@@ -137,5 +137,6 @@ model BudgetPosten {
   ist       Float?
   umgesetzt Boolean  @default(false)
   kfwFaehig Boolean  @default(false)
+  bankAnteil Float?
   createdAt DateTime
 }

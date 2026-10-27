@@ -225,6 +225,7 @@ export interface BudgetPosten {
   ist?: number; // bisher angefallene/bezahlte Kosten
   umgesetzt: boolean; // Maßnahme fertig -> Ist ersetzt den Plan-Wert
   kfwFaehig: boolean; // darf aus dem (zweckgebundenen) KfW-Darlehen bezahlt werden
+  bankAnteil?: number | null; // manuell: % des Nicht-KfW-Rests aus der Bank (Rest Eigenkapital); null = automatisch
   createdAt: string;
 }
 

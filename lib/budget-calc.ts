@@ -45,8 +45,10 @@ export interface Verteilung {
 
 // Verteilt die Finanzierung auf die Positionen:
 // 1. KfW zweckgebunden – nur in förderfähige Positionen, anteilig nach Kosten.
-// 2. Den Rest deckt zuerst das Bankdarlehen (anteilig), danach das Eigenkapital.
-// 3. Was dann noch fehlt, ist Fehlbetrag.
+// 2. Manuell eingestellte Positionen (bankAnteil) bekommen ihre gewünschte Bank/EK-Aufteilung,
+//    begrenzt durch das, was in den Töpfen noch da ist.
+// 3. Den Rest deckt zuerst das Bankdarlehen (anteilig), danach das Eigenkapital.
+// 4. Was dann noch fehlt, ist Fehlbetrag.
 export function verteileFinanzierung(plan: BudgetPlan, posten: BudgetPosten[]): Verteilung {
   const items = posten.map((p) => ({ p, wert: postenWert(p) })).filter((i) => i.wert > 0);
 
@@ -57,21 +59,37 @@ export function verteileFinanzierung(plan: BudgetPlan, posten: BudgetPosten[]): 
     const kfw = i.p.kfwFaehig && foerderfaehigeKosten > 0 ? (kfwGenutzt * i.wert) / foerderfaehigeKosten : 0;
     return { ...i, kfw, rest: i.wert - kfw };
   });
-  const restNachKfw = nachKfw.reduce((a, i) => a + i.rest, 0);
 
-  const bankGenutzt = Math.min(plan.bankDarlehen, restNachKfw);
-  const nachBank = nachKfw.map((i) => {
-    const bank = restNachKfw > 0 ? (bankGenutzt * i.rest) / restNachKfw : 0;
+  let bankTopf = plan.bankDarlehen;
+  let ekTopf = plan.eigenkapital;
+  const anteile: Record<string, Anteil> = {};
+
+  // Manuelle Positionen zuerst (in Listenreihenfolge), damit ihr Wunsch Vorrang vor der Automatik hat.
+  for (const i of nachKfw.filter((x) => x.p.bankAnteil != null)) {
+    const pct = Math.min(Math.max(i.p.bankAnteil ?? 0, 0), 100);
+    const bank = Math.min((i.rest * pct) / 100, bankTopf);
+    const ek = Math.min(i.rest - bank, ekTopf);
+    bankTopf -= bank;
+    ekTopf -= ek;
+    anteile[i.p.id] = { kfw: i.kfw, bank, ek, fehlbetrag: Math.max(i.rest - bank - ek, 0) };
+  }
+
+  const auto = nachKfw.filter((x) => x.p.bankAnteil == null);
+  const restAuto = auto.reduce((a, i) => a + i.rest, 0);
+  const bankAuto = Math.min(bankTopf, restAuto);
+  const nachBank = auto.map((i) => {
+    const bank = restAuto > 0 ? (bankAuto * i.rest) / restAuto : 0;
     return { ...i, bank, rest2: i.rest - bank };
   });
-  const restNachBank = restNachKfw - bankGenutzt;
-
-  const ekGenutzt = Math.min(plan.eigenkapital, restNachBank);
-  const anteile: Record<string, Anteil> = {};
+  const restNachBank = restAuto - bankAuto;
+  const ekAuto = Math.min(ekTopf, restNachBank);
   for (const i of nachBank) {
-    const ek = restNachBank > 0 ? (ekGenutzt * i.rest2) / restNachBank : 0;
+    const ek = restNachBank > 0 ? (ekAuto * i.rest2) / restNachBank : 0;
     anteile[i.p.id] = { kfw: i.kfw, bank: i.bank, ek, fehlbetrag: Math.max(i.rest2 - ek, 0) };
   }
+
+  const bankGenutzt = Object.values(anteile).reduce((a, x) => a + x.bank, 0);
+  const ekGenutzt = Object.values(anteile).reduce((a, x) => a + x.ek, 0);
 
   return {
     anteile,
