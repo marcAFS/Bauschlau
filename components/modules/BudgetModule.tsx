@@ -6,6 +6,7 @@ import { useBauSchlauStore } from "@/lib/store";
 import { formatCurrency, formatDate } from "@/lib/ui-helpers";
 import type { Rechnung } from "@/lib/types";
 import GewerkSelect from "@/components/GewerkSelect";
+import BudgetPlanungModule from "@/components/modules/BudgetPlanungModule";
 
 const inputClass =
   "w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-100 focus:border-orange-500 focus:outline-none";
@@ -188,6 +189,12 @@ function exportCsv(rechnungen: Rechnung[]) {
 export default function BudgetModule() {
   const rechnungen = useBauSchlauStore((s) => s.rechnungen);
   const deleteRechnung = useBauSchlauStore((s) => s.deleteRechnung);
+  const [ansicht, setAnsicht] = useState<"uebersicht" | "planung">("uebersicht");
+
+  const tabs = [
+    { id: "uebersicht", label: "Rechnungen & Soll/Ist" },
+    { id: "planung", label: "Budgetplanung" },
+  ] as const;
 
   return (
     <div className="space-y-8">
@@ -195,8 +202,28 @@ export default function BudgetModule() {
         <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-100">
           <Wallet className="h-5 w-5 text-orange-400" /> Budget, Rechnungen, Steuern &amp; Förderungen
         </h2>
-        <p className="text-sm text-zinc-500">Soll/Ist-Vergleich, Rechnungs-Upload mit Steuer-Flags und Jahresend-Export für den Steuerberater.</p>
+        <p className="text-sm text-zinc-500">Soll/Ist-Vergleich, Rechnungs-Upload mit Steuer-Flags, Jahresend-Export und Finanzierungsplanung.</p>
+        <div className="mt-4 inline-flex rounded-lg border border-zinc-800 bg-zinc-900/60 p-0.5" role="tablist">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              role="tab"
+              aria-selected={ansicht === t.id}
+              onClick={() => setAnsicht(t.id)}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                ansicht === t.id ? "bg-orange-500/15 text-orange-400" : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {ansicht === "planung" ? (
+        <BudgetPlanungModule />
+      ) : (
+        <>
 
       <section>
         <h3 className="mb-3 text-sm font-semibold text-zinc-300">Soll/Ist-Kostenvergleich pro Gewerk</h3>
@@ -236,6 +263,8 @@ export default function BudgetModule() {
           ))}
         </div>
       </section>
+        </>
+      )}
     </div>
   );
 }

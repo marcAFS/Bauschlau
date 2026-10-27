@@ -14,6 +14,8 @@ import type {
   Angebot,
   BautagebuchEintrag,
   MangelChatMessage,
+  BudgetPlan,
+  BudgetPosten,
   Bereich,
   AktiverTab,
 } from "./types";
@@ -39,6 +41,8 @@ interface ServerState {
   angebote: Angebot[];
   bautagebuch: BautagebuchEintrag[];
   mangelChat: MangelChatMessage[];
+  budgetPlan: (BudgetPlan & { id: string }) | null;
+  budgetPosten: BudgetPosten[];
 }
 
 interface BauSchlauState {
@@ -51,6 +55,8 @@ interface BauSchlauState {
   angebote: Angebot[];
   bautagebuch: BautagebuchEintrag[];
   mangelChat: MangelChatMessage[];
+  budgetPlan: BudgetPlan;
+  budgetPosten: BudgetPosten[];
 
   aktiverTab: AktiverTab;
   aktiverBereichFilter: Bereich | null;
@@ -92,6 +98,11 @@ interface BauSchlauState {
   updateBautagebuchEintrag: (id: string, patch: Partial<BautagebuchEintrag>) => void;
   deleteBautagebuchEintrag: (id: string) => void;
 
+  setBudgetPlan: (patch: Partial<BudgetPlan>) => void;
+  addBudgetPosten: (p: Pick<BudgetPosten, "name"> & Partial<Pick<BudgetPosten, "geplant">>) => BudgetPosten;
+  updateBudgetPosten: (id: string, patch: Partial<BudgetPosten>) => void;
+  deleteBudgetPosten: (id: string) => void;
+
   addMangelChatMessage: (m: Omit<MangelChatMessage, "id" | "createdAt">) => void;
 
   importLegacyLocalStorageData: () => Promise<void>;
@@ -116,6 +127,8 @@ export const useBauSchlauStore = create<BauSchlauState>()(
       angebote: [],
       bautagebuch: [],
       mangelChat: [],
+      budgetPlan: { bankDarlehen: 0, eigenkapital: 0, kfwDarlehen: 0 },
+      budgetPosten: [],
 
       aktiverTab: "dashboard",
       aktiverBereichFilter: null,
@@ -137,6 +150,14 @@ export const useBauSchlauStore = create<BauSchlauState>()(
             angebote: data.angebote.map(nullsToUndefined),
             bautagebuch: data.bautagebuch.map(nullsToUndefined),
             mangelChat: data.mangelChat.map(nullsToUndefined),
+            budgetPlan: data.budgetPlan
+              ? {
+                  bankDarlehen: data.budgetPlan.bankDarlehen,
+                  eigenkapital: data.budgetPlan.eigenkapital,
+                  kfwDarlehen: data.budgetPlan.kfwDarlehen,
+                }
+              : { bankDarlehen: 0, eigenkapital: 0, kfwDarlehen: 0 },
+            budgetPosten: (data.budgetPosten ?? []).map(nullsToUndefined),
             hydrated: true,
           });
         } catch (err) {
@@ -280,6 +301,34 @@ export const useBauSchlauStore = create<BauSchlauState>()(
         api.bautagebuch.remove(id).catch(onSyncFail(set, "Löschen konnte nicht gespeichert werden."));
       },
 
+      setBudgetPlan: (patch) => {
+        const plan = { ...get().budgetPlan, ...patch };
+        set({ budgetPlan: plan });
+        api.budgetPlan.save(plan).catch(onSyncFail(set, "Budgetplan konnte nicht gespeichert werden."));
+      },
+      addBudgetPosten: (p) => {
+        const posten: BudgetPosten = {
+          name: p.name,
+          geplant: p.geplant ?? 0,
+          umgesetzt: false,
+          id: uuid(),
+          createdAt: new Date().toISOString(),
+        };
+        set((s) => ({ budgetPosten: [...s.budgetPosten, posten] }));
+        api.budgetPosten.create(posten).catch(onSyncFail(set, "Budgetposten konnte nicht gespeichert werden."));
+        return posten;
+      },
+      updateBudgetPosten: (id, patch) => {
+        set((s) => ({
+          budgetPosten: s.budgetPosten.map((b) => (b.id === id ? { ...b, ...patch } : b)),
+        }));
+        api.budgetPosten.update(id, patch).catch(onSyncFail(set, "Änderung konnte nicht gespeichert werden."));
+      },
+      deleteBudgetPosten: (id) => {
+        set((s) => ({ budgetPosten: s.budgetPosten.filter((b) => b.id !== id) }));
+        api.budgetPosten.remove(id).catch(onSyncFail(set, "Löschen konnte nicht gespeichert werden."));
+      },
+
       addMangelChatMessage: (m) => {
         const message: MangelChatMessage = { ...m, id: uuid(), createdAt: new Date().toISOString() };
         set((s) => ({ mangelChat: [...s.mangelChat, message] }));
@@ -317,6 +366,8 @@ export const useBauSchlauStore = create<BauSchlauState>()(
         angebote: s.angebote,
         bautagebuch: s.bautagebuch,
         mangelChat: s.mangelChat,
+        budgetPlan: s.budgetPlan,
+        budgetPosten: s.budgetPosten,
         aktiverTab: s.aktiverTab,
       }),
     }

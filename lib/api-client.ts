@@ -17,6 +17,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 const post = <T>(path: string, data: unknown) => request<T>(path, { method: "POST", body: JSON.stringify(data) });
 const patch = <T>(path: string, data: unknown) => request<T>(path, { method: "PATCH", body: JSON.stringify(data) });
+const put = <T>(path: string, data: unknown) => request<T>(path, { method: "PUT", body: JSON.stringify(data) });
 const del = (path: string) => request<{ ok: true }>(path, { method: "DELETE" });
 
 export const api = {
@@ -59,6 +60,14 @@ export const api = {
     create: (data: unknown) => post("/api/bautagebuch", data),
     update: (id: string, data: unknown) => patch(`/api/bautagebuch/${id}`, data),
     remove: (id: string) => del(`/api/bautagebuch/${id}`),
+  },
+  budgetPlan: {
+    save: (data: unknown) => put("/api/budgetplan", data),
+  },
+  budgetPosten: {
+    create: (data: unknown) => post("/api/budgetposten", data),
+    update: (id: string, data: unknown) => patch(`/api/budgetposten/${id}`, data),
+    remove: (id: string) => del(`/api/budgetposten/${id}`),
   },
   mangelChat: {
     create: (data: unknown) => post("/api/mangelchat", data),

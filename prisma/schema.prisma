@@ -122,3 +122,19 @@ model MangelChatMessage {
   text      String
   createdAt DateTime
 }
+
+model BudgetPlan {
+  id           String @id
+  bankDarlehen Float  @default(0)
+  eigenkapital Float  @default(0)
+  kfwDarlehen  Float  @default(0)
+}
+
+model BudgetPosten {
+  id        String   @id
+  name      String
+  geplant   Float    @default(0)
+  ist       Float?
+  umgesetzt Boolean  @default(false)
+  createdAt DateTime
+}

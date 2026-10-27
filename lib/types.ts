@@ -212,6 +212,21 @@ export interface BautagebuchEintrag {
   fotoUrls?: string[];
 }
 
+export interface BudgetPlan {
+  bankDarlehen: number;
+  eigenkapital: number;
+  kfwDarlehen: number;
+}
+
+export interface BudgetPosten {
+  id: string;
+  name: string;
+  geplant: number;
+  ist?: number; // bisher angefallene/bezahlte Kosten
+  umgesetzt: boolean; // Maßnahme fertig -> Ist ersetzt den Plan-Wert
+  createdAt: string;
+}
+
 export interface MangelChatMessage {
   id: string;
   role: "user" | "assistant";

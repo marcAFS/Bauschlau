@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 
 export async function GET() {
   try {
-    const [tasks, wuensche, raumProfile, protokolle, fotos, rechnungen, angebote, bautagebuch, mangelChat] =
+    const [tasks, wuensche, raumProfile, protokolle, fotos, rechnungen, angebote, bautagebuch, mangelChat, budgetPlan, budgetPosten] =
       await Promise.all([
         prisma.task.findMany({ orderBy: { createdAt: "desc" } }),
         prisma.wunsch.findMany({ orderBy: { createdAt: "desc" } }),
@@ -14,6 +14,8 @@ export async function GET() {
         prisma.angebot.findMany({ orderBy: { erstelltAm: "desc" } }),
         prisma.bautagebuchEintrag.findMany({ orderBy: { datum: "desc" } }),
         prisma.mangelChatMessage.findMany({ orderBy: { createdAt: "asc" } }),
+        prisma.budgetPlan.findUnique({ where: { id: "plan" } }),
+        prisma.budgetPosten.findMany({ orderBy: { createdAt: "asc" } }),
       ]);
 
     return NextResponse.json({
@@ -26,6 +28,8 @@ export async function GET() {
       angebote,
       bautagebuch,
       mangelChat,
+      budgetPlan,
+      budgetPosten,
     });
   } catch (err) {
     console.error("Laden des Gesamtzustands fehlgeschlagen:", err);
